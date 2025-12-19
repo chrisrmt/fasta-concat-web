@@ -1,12 +1,225 @@
 <!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>FASTA Concat</title>
-  </head>
-  <body>
-    <h1>FASTA Concat Web App</h1>
-    <p>If you can see this, hosting works. Next we’ll add the real app.</p>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FASTA Concat</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; }
+    h1 { margin: 0 0 6px 0; }
+    .muted { color: #555; margin: 0 0 16px 0; }
+    .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: end; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; margin: 14px 0; }
+    label { display: block; font-size: 13px; color: #333; margin-bottom: 6px; }
+    input[type="text"], input[type="number"], textarea, select {
+      width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px;
+    }
+    textarea { min-height: 90px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; padding: 10px 8px; vertical-align: top; }
+    th { text-align: left; font-size: 13px; color: #333; }
+    .btn { padding: 8px 12px; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    .btn.primary { border-color: #0b5; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .small { font-size: 12px; color: #666; }
+    .status { padding: 8px 10px; border-radius: 8px; background: #f6f6f6; font-family: ui-monospace, monospace; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>FASTA Concat</h1>
+  <p class="muted">Concatenate aligned FASTA loci by full header, trim all-gap columns per locus, then export FASTA + NEXUS (MrBayes/MP).</p>
+
+  <div class="card">
+    <div class="row">
+      <div style="min-width:220px; flex:1;">
+        <label>Expected total taxa (optional)</label>
+        <input id="expectedTaxa" type="number" min="1" placeholder="e.g., 50" />
+        <div class="small">Used to flag name mismatches before concatenation.</div>
+      </div>
+
+      <div style="min-width:220px; flex:1;">
+        <label>Gap characters for trimming</label>
+        <input id="gapChars" type="text" value="-" />
+        <div class="small">Default: <code>-</code>. Use <code>-.</code> if your aligner uses dots too.</div>
+      </div>
+
+      <div style="min-width:220px;">
+        <label>&nbsp;</label>
+        <div class="row" style="align-items:center;">
+          <input id="trimGaps" type="checkbox" checked />
+          <span>Trim all-gap columns (per locus)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;">
+      <div>
+        <h2 style="margin:0 0 6px 0;">Loci</h2>
+        <div class="small">Add loci in order (ITS, LSU, RPB2…). Upload aligned FASTA for each.</div>
+      </div>
+      <div class="row">
+        <button class="btn" id="addRowBtn">+ Add locus</button>
+        <button class="btn" id="removeRowBtn">Remove last</button>
+      </div>
+    </div>
+
+    <div style="overflow:auto; margin-top:10px;">
+      <table id="lociTable">
+        <thead>
+          <tr>
+            <th style="width:120px;">Locus</th>
+            <th style="width:260px;">FASTA file</th>
+            <th>MB lset args (per locus)</th>
+            <th>MB prset args (optional)</th>
+          </tr>
+        </thead>
+        <tbody id="lociBody"></tbody>
+      </table>
+    </div>
+
+    <div class="small" style="margin-top:10px;">
+      Example lset: <code>nst=6 rates=invgamma</code> &nbsp; | &nbsp; Example prset: <code>statefreqpr=fixed(equal)</code>
+    </div>
+  </div>
+
+  <div class="card grid2">
+    <div>
+      <h2 style="margin:0 0 6px 0;">Templates</h2>
+      <div class="small">These are editable and will be shown again before download.</div>
+
+      <label style="margin-top:10px;">MrBayes block template (we will replace charsets/partition/lset/prset)</label>
+      <textarea id="mbTemplate"></textarea>
+
+      <label style="margin-top:10px;">PAUP/MP block template (we will replace outgroup line)</label>
+      <textarea id="mpTemplate"></textarea>
+    </div>
+
+    <div>
+      <h2 style="margin:0 0 6px 0;">Run</h2>
+
+      <label>Outgroup (for MP)</label>
+      <select id="outgroupSelect" disabled>
+        <option value="">Run Report first to populate taxa list</option>
+      </select>
+      <div class="small">Select from detected taxa to avoid typos.</div>
+
+      <div class="row" style="margin-top:12px;">
+        <button class="btn primary" id="reportBtn">Report</button>
+        <button class="btn primary" id="processBtn" disabled>Process / Concatenate</button>
+      </div>
+
+      <h3 style="margin:16px 0 6px 0;">Status</h3>
+      <div id="status" class="status">Ready.</div>
+
+      <h3 style="margin:16px 0 6px 0;">Downloads</h3>
+      <div class="row">
+        <button class="btn" id="dlFasta" disabled>Download FASTA</button>
+        <button class="btn" id="dlMb" disabled>Download NEXUS (MrBayes)</button>
+        <button class="btn" id="dlMp" disabled>Download NEXUS (MP)</button>
+      </div>
+
+      <div class="small" style="margin-top:10px;">
+        Next step: implement Report + Concatenate logic in JavaScript.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Pre-fill templates from your provided blocks
+    const MB_BLOCK = `begin mrbayes;
+\tset autoclose=yes nowarn=yes;  
+
+ [currently specified groups if you wish to use these]
+\tcharset ITS =  1- 477;
+\tcharset LSU =  478- 1270;
+\tcharset RPB2 =  1271- 2023;
+\tcharset TEF =  2024- 2831;
+\tcharset TUB =  2832- 3892;
+\tpartition currentPartition = 5: ITS, LSU, RPB2, TEF, TUB;
+\tset partition = currentPartition;
+\tlset applyto=(1,4) nst=6 rates=invgamma;
+\tlset applyto=(2) nst=2 rates=invgamma;
+\tprset applyto=(2) statefreqpr=fixed(equal);
+\tlset applyto=(3) nst=2 rates=gamma;
+\tprset applyto=(3) statefreqpr=fixed(equal);
+\tlset applyto=(5) nst=2 rates=invgamma;  
+\tunlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all); 
+\tprset applyto=(all) ratepr=variable;
+\tmcmcp ngen= 10000000 relburnin=yes burninfrac=0.25 printfreq=1000  samplefreq=1000 nchains=4 savebrlens=yes;
+\tmcmc;
+\tsumt;
+end;`;
+
+    const MP_BLOCK = `begin paup;
+       log file=log.txt;  
+       pset collapse=minbrlen;   
+       [ctype 1.5_1:all;]
+       set maxtrees=1000 increase=no;
+       outgroup <<outgroup name>>;
+       set criterion=parsimony;
+       hsearch addseq=random  nreps=1000; roottrees outroot=monophyl;
+       savetrees brlens=yes support=yes file=Mp_g.tre; 
+       pscores ALL/ci=yes tl=yes hi=yes rc=yes ri=yes khtest=yes;
+       bootstrap nreps=1000 Keepall=yes / AddSeq=random nreps=10;
+       roottrees outroot=monophyl;
+       savetrees file=MPtree.tre from=1 to=1 savebootp=both maxdec=0;
+    end;`;
+
+    document.getElementById('mbTemplate').value = MB_BLOCK;
+    document.getElementById('mpTemplate').value = MP_BLOCK;
+
+    const lociBody = document.getElementById('lociBody');
+    function addRow(locus="", lset="", prset="") {
+      const tr = document.createElement('tr');
+
+      const td1 = document.createElement('td');
+      const locusInput = document.createElement('input');
+      locusInput.type = "text"; locusInput.placeholder = "ITS";
+      locusInput.value = locus;
+      td1.appendChild(locusInput);
+
+      const td2 = document.createElement('td');
+      const fileInput = document.createElement('input');
+      fileInput.type = "file";
+      fileInput.accept = ".fa,.fasta,.fas,.fna,.txt";
+      td2.appendChild(fileInput);
+
+      const td3 = document.createElement('td');
+      const lsetInput = document.createElement('input');
+      lsetInput.type = "text"; lsetInput.placeholder = "nst=6 rates=invgamma";
+      lsetInput.value = lset;
+      td3.appendChild(lsetInput);
+
+      const td4 = document.createElement('td');
+      const prsetInput = document.createElement('input');
+      prsetInput.type = "text"; prsetInput.placeholder = "statefreqpr=fixed(equal) (optional)";
+      prsetInput.value = prset;
+      td4.appendChild(prsetInput);
+
+      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+      lociBody.appendChild(tr);
+    }
+
+    document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+    document.getElementById('removeRowBtn').addEventListener('click', () => {
+      if (lociBody.lastElementChild) lociBody.removeChild(lociBody.lastElementChild);
+    });
+
+    // Start with 5 common loci rows
+    addRow("ITS");
+    addRow("LSU");
+    addRow("RPB2");
+    addRow("TEF");
+    addRow("TUB");
+
+    // Buttons are wired later
+    document.getElementById('reportBtn').addEventListener('click', () => {
+      document.getElementById('status').textContent = "Report not implemented yet (UI skeleton only).";
+    });
+  </script>
+</body>
 </html>
