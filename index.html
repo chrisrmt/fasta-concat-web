@@ -86,7 +86,7 @@
           <label>Number of loci</label>
           <input id="lociCount" type="number" min="1" value="5" />
         </div>
-        <button class="btn" id="setLociBtn">Set rows</button>
+        <button type="button" class="btn" id="setLociBtn">Set rows</button>
       </div>
     </div>
 
@@ -131,8 +131,8 @@
       <div class="small">Select from detected taxa to avoid typos.</div>
 
       <div class="row" style="margin-top:12px;">
-        <button class="btn primary" id="reportBtn">Report</button>
-        <button class="btn primary" id="processBtn" disabled>Process / Concatenate</button>
+        <button type="button" class="btn primary" id="reportBtn">Report</button>
+        <button type="button" class="btn primary" id="processBtn" disabled>Process / Concatenate</button>
       </div>
 
       <h3 style="margin:16px 0 6px 0;">Status</h3>
@@ -141,9 +141,9 @@
 
       <h3 style="margin:16px 0 6px 0;">Downloads</h3>
       <div class="row">
-        <button class="btn" id="dlFasta" disabled>Download FASTA</button>
-        <button class="btn" id="dlMb" disabled>Download NEXUS (MrBayes)</button>
-        <button class="btn" id="dlMp" disabled>Download NEXUS (MP)</button>
+        <button type="button" class="btn" id="dlFasta" disabled>Download FASTA</button>
+        <button type="button" class="btn" id="dlMb" disabled>Download NEXUS (MrBayes)</button>
+        <button type="button" class="btn" id="dlMp" disabled>Download NEXUS (MP)</button>
       </div>
 
       <div class="small" style="margin-top:10px;">
@@ -156,16 +156,16 @@
     <div class="modalCard">
       <div class="modalHeader">
         <h3 id="previewTitle">Preview</h3>
-        <button class="btn" id="previewCloseTop">Close</button>
+        <button type="button" class="btn" id="previewCloseTop">Close</button>
       </div>
       <div class="modalBody">
         <textarea id="previewText"></textarea>
         <div class="small" style="margin-top:8px;">Edit if needed, then download.</div>
       </div>
       <div class="modalFooter">
-        <button class="btn" id="previewReset">Reset</button>
-        <button class="btn primary" id="previewDownload">Download</button>
-        <button class="btn" id="previewClose">Close</button>
+        <button type="button" class="btn" id="previewReset">Reset</button>
+        <button type="button" class="btn primary" id="previewDownload">Download</button>
+        <button type="button" class="btn" id="previewClose">Close</button>
       </div>
     </div>
   </div>
@@ -277,16 +277,20 @@ end;`;
     }
 
     function setBusy(isBusy, msg) {
-      document.getElementById('reportBtn').disabled = isBusy;
-      document.getElementById('processBtn').disabled = isBusy || !APP_STATE.report;
+      document.getElementById('reportBtn')?.toggleAttribute?.('disabled', isBusy);
+      const p = document.getElementById('processBtn');
+      if (p) p.disabled = isBusy || !APP_STATE.report;
       if (msg) setStatus(msg);
     }
 
     function resetOutputsUI() {
       APP_STATE.outputs = null;
-      document.getElementById('dlFasta').disabled = true;
-      document.getElementById('dlMb').disabled = true;
-      document.getElementById('dlMp').disabled = true;
+      const b1 = document.getElementById('dlFasta');
+      const b2 = document.getElementById('dlMb');
+      const b3 = document.getElementById('dlMp');
+      if (b1) b1.disabled = true;
+      if (b2) b2.disabled = true;
+      if (b3) b3.disabled = true;
     }
 
     window.addEventListener('error', (e) => {
@@ -566,6 +570,8 @@ end;`;
       renderReport({ expectedTaxa, detectedTaxa: unionTaxa, locusStats, warnings });
 
       setStatus(`Report OK. Detected taxa: ${unionTaxa.length}.`);
+      const pbtn = document.getElementById('processBtn');
+      if (pbtn) pbtn.disabled = false;
       setBusy(false);
     });
 
@@ -755,7 +761,8 @@ end;`;
       if (e.target === previewModal) closePreview();
     });
 
-    document.getElementById('processBtn').addEventListener('click', async () => {
+    async function runProcess() {
+      setStatus('Process clicked…');
       resetOutputsUI();
       const report = APP_STATE.report;
       if (!report) {
@@ -821,17 +828,19 @@ end;`;
 
         const nexusMatrix = buildNexusMatrix(taxaOrder, concatMap, totalLen);
 
-        const mbTemplate = document.getElementById('mbTemplate').value;
+        const mbTemplate = document.getElementById('mbTemplate')?.value;
+        if (!mbTemplate) throw new Error('MrBayes template is missing.');
         const dynamic = buildCharsetsAndModels(lociIncluded);
         const mbBlock = injectMbDynamic(mbTemplate, dynamic);
         const nexusMb = nexusMatrix + '\n' + mbBlock.trim() + '\n';
 
-        const outgroup = document.getElementById('outgroupSelect').value;
+        const outgroup = document.getElementById('outgroupSelect')?.value;
         let nexusMp = null;
         if (!outgroup) {
           warnings.push('No outgroup selected yet: MP output will stay disabled until you choose one.');
         } else {
-          const mpTemplate = document.getElementById('mpTemplate').value;
+          const mpTemplate = document.getElementById('mpTemplate')?.value;
+          if (!mpTemplate) throw new Error('MP template is missing.');
           const mpBlock = injectOutgroup(mpTemplate, outgroup);
           nexusMp = nexusMatrix + '\n' + mpBlock.trim() + '\n';
         }
@@ -844,17 +853,22 @@ end;`;
           warnings,
         };
 
-        document.getElementById('dlFasta').disabled = false;
-        document.getElementById('dlMb').disabled = false;
-        document.getElementById('dlMp').disabled = (nexusMp === null);
+        const b1 = document.getElementById('dlFasta');
+        const b2 = document.getElementById('dlMb');
+        const b3 = document.getElementById('dlMp');
+        if (b1) b1.disabled = false;
+        if (b2) b2.disabled = false;
+        if (b3) b3.disabled = (nexusMp === null);
 
         if (warnings.length) {
           const panel = document.getElementById('reportPanel');
-          panel.insertAdjacentHTML('afterbegin', `
-            <div style="margin:8px 0; padding:8px 10px; border:1px solid #f0c36d; border-radius:8px; background:#fff7e6;">
-              <strong>Process warnings</strong><br>${warnings.map(w => `• ${escapeHtml(w)}`).join('<br>')}
-            </div>
-          `);
+          if (panel) {
+            panel.insertAdjacentHTML('afterbegin', `
+              <div style="margin:8px 0; padding:8px 10px; border:1px solid #f0c36d; border-radius:8px; background:#fff7e6;">
+                <strong>Process warnings</strong><br>${warnings.map(w => `• ${escapeHtml(w)}`).join('<br>')}
+              </div>
+            `);
+          }
         }
 
         setStatus('Processing complete. Ready to download.');
@@ -862,14 +876,23 @@ end;`;
       } catch (e) {
         setStatus(`Process failed: ${e.message || e}`);
         const panel = document.getElementById('reportPanel');
-        panel.insertAdjacentHTML('afterbegin', `
-          <div style="margin:8px 0; padding:8px 10px; border:1px solid #e99; border-radius:8px; background:#fff0f0;">
-            <strong>Process error</strong><br>${escapeHtml(e.message || e)}
-          </div>
-        `);
+        if (panel) {
+          panel.insertAdjacentHTML('afterbegin', `
+            <div style="margin:8px 0; padding:8px 10px; border:1px solid #e99; border-radius:8px; background:#fff0f0;">
+              <strong>Process error</strong><br>${escapeHtml(e.message || e)}
+            </div>
+          `);
+        }
         setBusy(false);
       }
-    });
+    }
+
+    const processBtnEl = document.getElementById('processBtn');
+    if (processBtnEl) {
+      processBtnEl.addEventListener('click', runProcess);
+      processBtnEl.onclick = runProcess;
+    }
+    window.__runProcess = runProcess;
 
     document.getElementById('dlFasta').addEventListener('click', () => {
       if (!APP_STATE.outputs) return;
