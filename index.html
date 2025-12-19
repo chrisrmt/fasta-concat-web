@@ -36,6 +36,7 @@
     .status { padding: 8px 10px; border-radius: 8px; background: #f6f6f6; font-family: ui-monospace, monospace; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     @media (max-width: 1000px) { .grid2 { grid-template-columns: 1fr; } }
+
     .modalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 9999; }
     .modalCard { background: #fff; border-radius: 12px; width: min(1100px, 100%); max-height: 90vh; overflow: hidden; border: 1px solid #ddd; display: flex; flex-direction: column; }
     .modalHeader { padding: 12px 14px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -80,7 +81,6 @@
         <div class="small">Set the number of loci, then fill in names + upload aligned FASTA for each row.</div>
       </div>
 
-      <!-- NEW: set number of loci -->
       <div class="row" style="align-items:flex-end;">
         <div style="min-width:160px;">
           <label>Number of loci</label>
@@ -147,9 +147,9 @@
       </div>
 
       <div class="small" style="margin-top:10px;">
-        Next step: implement Report + Concatenate logic in JavaScript.
+        Workflow: Report → choose outgroup (optional until MP) → Process → Download.
       </div>
-  </div>
+    </div>
   </div>
 
   <div id="previewModal" class="modalOverlay" role="dialog" aria-modal="true" aria-hidden="true">
@@ -269,19 +269,59 @@ end;`;
 
     const APP_STATE = {
       report: null,   // will hold the last successful report
+      outputs: null,
     };
+
+    function setStatus(msg) {
+      document.getElementById('status').textContent = msg;
+    }
+
+    function setBusy(isBusy, msg) {
+      document.getElementById('reportBtn').disabled = isBusy;
+      document.getElementById('processBtn').disabled = isBusy || !APP_STATE.report;
+      if (msg) setStatus(msg);
+    }
+
+    function resetOutputsUI() {
+      APP_STATE.outputs = null;
+      document.getElementById('dlFasta').disabled = true;
+      document.getElementById('dlMb').disabled = true;
+      document.getElementById('dlMp').disabled = true;
+    }
+
+    window.addEventListener('error', (e) => {
+      const msg = e?.message || String(e);
+      setStatus(`Error: ${msg}`);
+      const panel = document.getElementById('reportPanel');
+      panel.insertAdjacentHTML('afterbegin', `
+        <div style="margin:8px 0; padding:8px 10px; border:1px solid #e99; border-radius:8px; background:#fff0f0;">
+          <strong>JavaScript error</strong><br>${escapeHtml(msg)}
+        </div>
+      `);
+      setBusy(false);
+    });
+
+    window.addEventListener('unhandledrejection', (e) => {
+      const msg = e?.reason?.message || String(e?.reason || e);
+      setStatus(`Error: ${msg}`);
+      const panel = document.getElementById('reportPanel');
+      panel.insertAdjacentHTML('afterbegin', `
+        <div style="margin:8px 0; padding:8px 10px; border:1px solid #e99; border-radius:8px; background:#fff0f0;">
+          <strong>Unhandled promise rejection</strong><br>${escapeHtml(msg)}
+        </div>
+      `);
+      setBusy(false);
+    });
 
     function getGapSet() {
       const raw = (document.getElementById('gapChars').value || '-').trim();
       const s = new Set();
       for (const ch of raw) s.add(ch);
-      // Always treat '-' as a gap if user accidentally leaves it out
       if (!s.has('-')) s.add('-');
       return s;
     }
 
     function parseFasta(text) {
-      // Returns: { order: [header...], seqs: Map<header, sequenceString> }
       const order = [];
       const seqs = new Map();
 
@@ -293,44 +333,32 @@ end;`;
         const line = rawLine.trim();
         if (!line) continue;
         if (line.startsWith('>')) {
-          // flush previous
           if (currentHeader !== null) {
             const seq = currentSeqParts.join('').replace(/\s+/g, '');
-            if (seqs.has(currentHeader)) {
-              throw new Error(`Duplicate header found: ${currentHeader}`);
-            }
+            if (seqs.has(currentHeader)) throw new Error(`Duplicate header found: ${currentHeader}`);
             order.push(currentHeader);
             seqs.set(currentHeader, seq);
           }
           currentHeader = line.slice(1); // full header match
           currentSeqParts = [];
         } else {
-          if (currentHeader === null) {
-            throw new Error('FASTA parse error: sequence data found before any header (line starting with >).');
-          }
+          if (currentHeader === null) throw new Error('FASTA parse error: sequence data found before any header (line starting with >).');
           currentSeqParts.push(line);
         }
       }
 
-      // flush last
       if (currentHeader !== null) {
         const seq = currentSeqParts.join('').replace(/\s+/g, '');
-        if (seqs.has(currentHeader)) {
-          throw new Error(`Duplicate header found: ${currentHeader}`);
-        }
+        if (seqs.has(currentHeader)) throw new Error(`Duplicate header found: ${currentHeader}`);
         order.push(currentHeader);
         seqs.set(currentHeader, seq);
       }
 
-      if (order.length === 0) {
-        throw new Error('No FASTA records found (no lines starting with >).');
-      }
-
+      if (order.length === 0) throw new Error('No FASTA records found (no lines starting with >).');
       return { order, seqs };
     }
 
     function validateAligned(seqsMap) {
-      // Ensures all sequences are same length (including gaps)
       let L = null;
       for (const [hdr, seq] of seqsMap.entries()) {
         if (L === null) L = seq.length;
@@ -346,7 +374,6 @@ end;`;
       const nTaxa = seqsMap.size;
       if (nTaxa === 0) return 0;
 
-      // Count gap chars per column; if all taxa are gaps in that column -> removed
       const gapCounts = new Uint32Array(rawLen);
       for (const seq of seqsMap.values()) {
         for (let i = 0; i < rawLen; i++) {
@@ -370,6 +397,15 @@ end;`;
         rows.push({ locus, file, lset, prset });
       }
       return rows;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
     }
 
     function renderReport({ expectedTaxa, detectedTaxa, locusStats, warnings }) {
@@ -416,15 +452,6 @@ end;`;
       panel.innerHTML = headerHtml + warnHtml + tableHtml;
     }
 
-    function escapeHtml(str) {
-      return String(str)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-    }
-
     function setOutgroupOptions(taxaList) {
       const sel = document.getElementById('outgroupSelect');
       sel.innerHTML = '';
@@ -443,20 +470,21 @@ end;`;
     }
 
     document.getElementById('reportBtn').addEventListener('click', async () => {
-      const statusEl = document.getElementById('status');
+      resetOutputsUI();
       const panel = document.getElementById('reportPanel');
       panel.innerHTML = '';
+      setBusy(true, 'Running report…');
 
       const rows = getLociRows();
       if (rows.length === 0) {
-        statusEl.textContent = 'Add at least 1 locus row first.';
+        setStatus('Add at least 1 locus row first.');
+        setBusy(false);
         return;
       }
 
       const gapSet = getGapSet();
       const doTrim = document.getElementById('trimGaps').checked;
 
-      // Expected taxa (optional)
       const expectedRaw = document.getElementById('expectedTaxa').value;
       const expectedTaxa = expectedRaw ? parseInt(expectedRaw, 10) : null;
 
@@ -465,8 +493,6 @@ end;`;
       const unionTaxa = [];
       const unionSeen = new Set();
       const locusStats = [];
-
-      statusEl.textContent = 'Running report…';
 
       for (let idx = 0; idx < rows.length; idx++) {
         const r = rows[idx];
@@ -486,7 +512,6 @@ end;`;
           const rawLen = validateAligned(parsed.seqs);
           const trimmedLen = doTrim ? computeTrimmedLength(parsed.seqs, rawLen, gapSet) : rawLen;
 
-          // Update union taxa in order of first appearance across files
           for (const hdr of parsed.order) {
             if (!unionSeen.has(hdr)) {
               unionSeen.add(hdr);
@@ -517,19 +542,18 @@ end;`;
       }
 
       if (errors.length > 0) {
-        statusEl.textContent = `Report failed: ${errors.length} error(s). Fix the issues and run Report again.`;
+        setStatus(`Report failed: ${errors.length} error(s). Fix the issues and run Report again.`);
         panel.innerHTML = `
           <div style="margin:8px 0; padding:8px 10px; border:1px solid #e99; border-radius:8px; background:#fff0f0;">
             <strong>Errors</strong><br>${errors.map(e => `• ${escapeHtml(e)}`).join('<br>')}
           </div>
         `;
-        document.getElementById('processBtn').disabled = true;
         document.getElementById('outgroupSelect').disabled = true;
         APP_STATE.report = null;
+        setBusy(false);
         return;
       }
 
-      // Success
       APP_STATE.report = {
         expectedTaxa,
         detectedTaxa: unionTaxa,
@@ -541,12 +565,11 @@ end;`;
       setOutgroupOptions(unionTaxa);
       renderReport({ expectedTaxa, detectedTaxa: unionTaxa, locusStats, warnings });
 
-      statusEl.textContent = `Report OK. Detected taxa: ${unionTaxa.length}.`;
-    document.getElementById('processBtn').disabled = false;
+      setStatus(`Report OK. Detected taxa: ${unionTaxa.length}.`);
+      setBusy(false);
     });
 
     function pickFillGapChar() {
-      // NEXUS GAP is '-', and most pipelines expect '-' for missing blocks.
       return '-';
     }
 
@@ -566,19 +589,14 @@ end;`;
     }
 
     function trimAlignment(seqsMap, rawLen, gapSet, doTrim) {
-      if (!doTrim) {
-        return { seqs: new Map(seqsMap), len: rawLen };
-      }
-      if (rawLen === 0 || seqsMap.size === 0) {
-        return { seqs: new Map(seqsMap), len: 0 };
-      }
+      if (!doTrim) return { seqs: new Map(seqsMap), len: rawLen };
+      if (rawLen === 0 || seqsMap.size === 0) return { seqs: new Map(seqsMap), len: 0 };
+
       const keptIdx = buildKeptIndices(seqsMap, rawLen, gapSet);
       const out = new Map();
       for (const [hdr, seq] of seqsMap.entries()) {
         let parts = [];
-        for (let k = 0; k < keptIdx.length; k++) {
-          parts.push(seq[keptIdx[k]]);
-        }
+        for (let k = 0; k < keptIdx.length; k++) parts.push(seq[keptIdx[k]]);
         out.set(hdr, parts.join(''));
       }
       return { seqs: out, len: keptIdx.length };
@@ -591,14 +609,11 @@ end;`;
 
     function wrapFasta(seq, width = 80) {
       let out = '';
-      for (let i = 0; i < seq.length; i += width) {
-        out += seq.slice(i, i + width) + '\n';
-      }
+      for (let i = 0; i < seq.length; i += width) out += seq.slice(i, i + width) + '\n';
       return out;
     }
 
     function nexusQuote(label) {
-      // Single-quote and escape embedded single quotes by doubling.
       const s = String(label).replaceAll("'", "''");
       return `'${s}'`;
     }
@@ -611,9 +626,7 @@ end;`;
       lines.push('BEGIN TAXA;');
       lines.push(`  DIMENSIONS NTAX=${ntax};`);
       lines.push('  TAXLABELS');
-      for (const t of taxaOrder) {
-        lines.push(`    ${nexusQuote(t)}`);
-      }
+      for (const t of taxaOrder) lines.push(`    ${nexusQuote(t)}`);
       lines.push('  ;');
       lines.push('END;');
       lines.push('');
@@ -621,10 +634,7 @@ end;`;
       lines.push(`  DIMENSIONS NCHAR=${nchar};`);
       lines.push('  FORMAT DATATYPE=DNA MISSING=? GAP=-;');
       lines.push('  MATRIX');
-      for (const t of taxaOrder) {
-        const seq = seqMap.get(t) || '';
-        lines.push(`    ${nexusQuote(t)}    ${seq}`);
-      }
+      for (const t of taxaOrder) lines.push(`    ${nexusQuote(t)}    ${seqMap.get(t) || ''}`);
       lines.push('  ;');
       lines.push('END;');
       lines.push('');
@@ -632,7 +642,6 @@ end;`;
     }
 
     function buildCharsetsAndModels(lociIncluded) {
-      // lociIncluded: [{name, len, lset, prset, partIndex}]
       let pos = 1;
       const charsets = [];
       for (const L of lociIncluded) {
@@ -643,15 +652,12 @@ end;`;
       }
 
       const lines = [];
-      for (const cs of charsets) {
-        lines.push(`\tcharset ${cs.name} =  ${cs.start}- ${cs.end};`);
-      }
+      for (const cs of charsets) lines.push(`\tcharset ${cs.name} =  ${cs.start}- ${cs.end};`);
 
       const names = charsets.map(c => c.name);
       lines.push(`\tpartition currentPartition = ${names.length}: ${names.join(', ')};`);
       lines.push('\tset partition = currentPartition;');
 
-      // Group lset by exact string
       const lsetGroups = new Map();
       for (const L of lociIncluded) {
         const key = (L.lset || '').trim();
@@ -664,7 +670,6 @@ end;`;
         lines.push(`\tlset applyto=${apply} ${args};`);
       }
 
-      // Group prset by exact string (skip blank)
       const prsetGroups = new Map();
       for (const L of lociIncluded) {
         const key = (L.prset || '').trim();
@@ -686,9 +691,8 @@ end;`;
       for (let i = 0; i < lines.length; i++) {
         if (/^\s*charset\b/i.test(lines[i])) { start = i; break; }
       }
-      if (start === -1) {
-        throw new Error('MrBayes template: could not find any "charset" line to replace.');
-      }
+      if (start === -1) throw new Error('MrBayes template: could not find any "charset" line to replace.');
+
       let end = -1;
       for (let i = start; i < lines.length; i++) {
         if (/^\s*unlink\b/i.test(lines[i])) { end = i; break; }
@@ -696,15 +700,13 @@ end;`;
       if (end === -1) end = lines.length;
 
       const dynLines = String(dynamicBlock).trimEnd().split('\n');
-      const out = [...lines.slice(0, start), ...dynLines, ...lines.slice(end)];
-      return out.join('\n');
+      return [...lines.slice(0, start), ...dynLines, ...lines.slice(end)].join('\n');
     }
 
     function injectOutgroup(mpTemplate, outgroupName) {
       const quoted = nexusQuote(outgroupName);
       const re = /(^\s*)outgroup\b.*$/im;
       if (!re.test(mpTemplate)) {
-        // If no outgroup line exists, just insert after BEGIN PAUP;
         return mpTemplate.replace(/begin\s+paup\s*;/i, match => `${match}\n       outgroup ${quoted};`);
       }
       return mpTemplate.replace(re, (m, indent) => `${indent}outgroup ${quoted};`);
@@ -736,7 +738,7 @@ end;`;
     function openPreview(kind, title, content) {
       PREVIEW_KIND = kind;
       previewTitle.textContent = title;
-      previewText.value = content;
+      previewText.value = content || '';
       previewModal.style.display = 'flex';
       previewModal.setAttribute('aria-hidden', 'false');
     }
@@ -753,135 +755,119 @@ end;`;
       if (e.target === previewModal) closePreview();
     });
 
-    // Outputs stored after processing
-    APP_STATE.outputs = null;
-
     document.getElementById('processBtn').addEventListener('click', async () => {
-      const statusEl = document.getElementById('status');
+      resetOutputsUI();
       const report = APP_STATE.report;
       if (!report) {
-        statusEl.textContent = 'Run Report first.';
+        setStatus('Run Report first.');
         return;
       }
 
-      statusEl.textContent = 'Processing / concatenating…';
+      setBusy(true, 'Processing / concatenating…');
+      await new Promise(requestAnimationFrame);
 
-      const gapSet = getGapSet();
-      const doTrim = report.doTrim;
-      const fillGap = pickFillGapChar();
-
-      // Build per-locus trimmed seq maps
-      const lociProcessed = [];
-      const warnings = [];
-
-      for (const ls of report.locusStats) {
-        const rawLen = ls.rawLen;
-        const aligned = ls.parsed.seqs;
-        const trimmed = trimAlignment(aligned, rawLen, gapSet, doTrim);
-        const len = trimmed.len;
-
-        lociProcessed.push({
-          name: ls.locus,
-          len,
-          seqs: trimmed.seqs,
-          lset: (ls.lset || '').trim(),
-          prset: (ls.prset || '').trim(),
-        });
-      }
-
-      // Decide which loci are included in partitions (len > 0)
-      const lociIncluded = [];
-      let partIndex = 0;
-      for (const L of lociProcessed) {
-        if (L.len <= 0) {
-          warnings.push(`Locus ${L.name} has length 0 after trimming; it will be omitted from partitions.`);
-          continue;
-        }
-        if (!L.lset) {
-          statusEl.textContent = `Cannot proceed: MB lset is missing for locus ${L.name}.`;
-          return;
-        }
-        partIndex += 1;
-        lociIncluded.push({ ...L, partIndex });
-      }
-
-      // Concatenate
-      const taxaOrder = report.detectedTaxa;
-      const concatMap = new Map();
-      let totalLen = 0;
-      for (const L of lociProcessed) totalLen += L.len;
-
-      for (const taxon of taxaOrder) {
-        let parts = [];
-        for (const L of lociProcessed) {
-          const seq = L.seqs.get(taxon);
-          if (seq !== undefined) {
-            parts.push(seq);
-          } else {
-            parts.push(repeatChar(fillGap, L.len));
-          }
-        }
-        concatMap.set(taxon, parts.join(''));
-      }
-
-      // FASTA output
-      let fastaOut = '';
-      for (const taxon of taxaOrder) {
-        fastaOut += `>${taxon}\n`;
-        fastaOut += wrapFasta(concatMap.get(taxon) || '', 80);
-      }
-
-      // NEXUS matrix (shared for MB and MP)
-      const nexusMatrix = buildNexusMatrix(taxaOrder, concatMap, totalLen);
-
-      // Build MB block by injecting dynamic section into template
-      const mbTemplate = document.getElementById('mbTemplate').value;
-      const dynamic = buildCharsetsAndModels(lociIncluded);
-      let mbBlock;
       try {
-        mbBlock = injectMbDynamic(mbTemplate, dynamic);
+        const gapSet = getGapSet();
+        const doTrim = report.doTrim;
+        const fillGap = pickFillGapChar();
+
+        const lociProcessed = [];
+        const warnings = [];
+
+        for (const ls of report.locusStats) {
+          const trimmed = trimAlignment(ls.parsed.seqs, ls.rawLen, gapSet, doTrim);
+          lociProcessed.push({
+            name: ls.locus,
+            len: trimmed.len,
+            seqs: trimmed.seqs,
+            lset: (ls.lset || '').trim(),
+            prset: (ls.prset || '').trim(),
+          });
+        }
+
+        const lociIncluded = [];
+        let partIndex = 0;
+        for (const L of lociProcessed) {
+          if (L.len <= 0) {
+            warnings.push(`Locus ${L.name} has length 0 after trimming; omitted from partitions.`);
+            continue;
+          }
+          if (!L.lset) {
+            throw new Error(`MB lset is missing for locus ${L.name}.`);
+          }
+          partIndex += 1;
+          lociIncluded.push({ ...L, partIndex });
+        }
+
+        const taxaOrder = report.detectedTaxa;
+        const concatMap = new Map();
+        let totalLen = 0;
+        for (const L of lociProcessed) totalLen += L.len;
+
+        for (const taxon of taxaOrder) {
+          let parts = [];
+          for (const L of lociProcessed) {
+            const seq = L.seqs.get(taxon);
+            parts.push(seq !== undefined ? seq : repeatChar(fillGap, L.len));
+          }
+          concatMap.set(taxon, parts.join(''));
+        }
+
+        let fastaOut = '';
+        for (const taxon of taxaOrder) {
+          fastaOut += `>${taxon}\n`;
+          fastaOut += wrapFasta(concatMap.get(taxon) || '', 80);
+        }
+
+        const nexusMatrix = buildNexusMatrix(taxaOrder, concatMap, totalLen);
+
+        const mbTemplate = document.getElementById('mbTemplate').value;
+        const dynamic = buildCharsetsAndModels(lociIncluded);
+        const mbBlock = injectMbDynamic(mbTemplate, dynamic);
+        const nexusMb = nexusMatrix + '\n' + mbBlock.trim() + '\n';
+
+        const outgroup = document.getElementById('outgroupSelect').value;
+        let nexusMp = null;
+        if (!outgroup) {
+          warnings.push('No outgroup selected yet: MP output will stay disabled until you choose one.');
+        } else {
+          const mpTemplate = document.getElementById('mpTemplate').value;
+          const mpBlock = injectOutgroup(mpTemplate, outgroup);
+          nexusMp = nexusMatrix + '\n' + mpBlock.trim() + '\n';
+        }
+
+        APP_STATE.outputs = {
+          fasta: fastaOut,
+          nexusMb,
+          nexusMp,
+          originals: { nexusMb, nexusMp },
+          warnings,
+        };
+
+        document.getElementById('dlFasta').disabled = false;
+        document.getElementById('dlMb').disabled = false;
+        document.getElementById('dlMp').disabled = (nexusMp === null);
+
+        if (warnings.length) {
+          const panel = document.getElementById('reportPanel');
+          panel.insertAdjacentHTML('afterbegin', `
+            <div style="margin:8px 0; padding:8px 10px; border:1px solid #f0c36d; border-radius:8px; background:#fff7e6;">
+              <strong>Process warnings</strong><br>${warnings.map(w => `• ${escapeHtml(w)}`).join('<br>')}
+            </div>
+          `);
+        }
+
+        setStatus('Processing complete. Ready to download.');
+        setBusy(false);
       } catch (e) {
-        statusEl.textContent = `MrBayes template error: ${e.message || e}`;
-        return;
-      }
-
-      const nexusMb = nexusMatrix + '\n' + mbBlock.trim() + '\n';
-
-      // MP block with outgroup injection
-      const mpTemplate = document.getElementById('mpTemplate').value;
-      const outSel = document.getElementById('outgroupSelect');
-      const outgroup = outSel.value;
-      if (!outgroup) {
-        statusEl.textContent = 'Select an outgroup (for MP) before processing.';
-        return;
-      }
-      const mpBlock = injectOutgroup(mpTemplate, outgroup);
-      const nexusMp = nexusMatrix + '\n' + mpBlock.trim() + '\n';
-
-      APP_STATE.outputs = {
-        fasta: fastaOut,
-        nexusMb,
-        nexusMp,
-        originals: { nexusMb, nexusMp },
-        warnings,
-      };
-
-      // Enable downloads
-      document.getElementById('dlFasta').disabled = false;
-      document.getElementById('dlMb').disabled = false;
-      document.getElementById('dlMp').disabled = false;
-
-      statusEl.textContent = warnings.length
-        ? `Processing complete with warnings: ${warnings.length}. (See report warnings in MB/MP output step.)`
-        : 'Processing complete. Ready to download.';
-
-      if (warnings.length) {
+        setStatus(`Process failed: ${e.message || e}`);
         const panel = document.getElementById('reportPanel');
-        const warnHtml = `
-          <div style="margin:8px 0; padding:8px 10px; border:1px solid #f0c36d; border-radius:8px; background:#fff7e6;">
-            <strong>Process warnings</strong><br>${warnings.map(w => `• ${escapeHtml(w)}`).join('<br>')}
-          </div>`;
-        panel.insertAdjacentHTML('afterbegin', warnHtml);
+        panel.insertAdjacentHTML('afterbegin', `
+          <div style="margin:8px 0; padding:8px 10px; border:1px solid #e99; border-radius:8px; background:#fff0f0;">
+            <strong>Process error</strong><br>${escapeHtml(e.message || e)}
+          </div>
+        `);
+        setBusy(false);
       }
     });
 
@@ -897,13 +883,17 @@ end;`;
 
     document.getElementById('dlMp').addEventListener('click', () => {
       if (!APP_STATE.outputs) return;
+      if (!APP_STATE.outputs.nexusMp) {
+        setStatus('Select an outgroup first to enable MP output.');
+        return;
+      }
       openPreview('mp', 'MP NEXUS (editable)', APP_STATE.outputs.nexusMp);
     });
 
     previewResetBtn.addEventListener('click', () => {
       if (!APP_STATE.outputs || !PREVIEW_KIND) return;
       if (PREVIEW_KIND === 'mb') previewText.value = APP_STATE.outputs.originals.nexusMb;
-      if (PREVIEW_KIND === 'mp') previewText.value = APP_STATE.outputs.originals.nexusMp;
+      if (PREVIEW_KIND === 'mp') previewText.value = APP_STATE.outputs.originals.nexusMp || '';
     });
 
     previewDownloadBtn.addEventListener('click', () => {
