@@ -36,6 +36,13 @@
     .status { padding: 8px 10px; border-radius: 8px; background: #f6f6f6; font-family: ui-monospace, monospace; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     @media (max-width: 1000px) { .grid2 { grid-template-columns: 1fr; } }
+    .modalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 9999; }
+    .modalCard { background: #fff; border-radius: 12px; width: min(1100px, 100%); max-height: 90vh; overflow: hidden; border: 1px solid #ddd; display: flex; flex-direction: column; }
+    .modalHeader { padding: 12px 14px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .modalHeader h3 { margin: 0; font-size: 16px; }
+    .modalBody { padding: 12px 14px; overflow: auto; }
+    .modalBody textarea { min-height: 60vh; }
+    .modalFooter { padding: 12px 14px; border-top: 1px solid #eee; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
   </style>
 </head>
 <body>
@@ -141,6 +148,24 @@
 
       <div class="small" style="margin-top:10px;">
         Next step: implement Report + Concatenate logic in JavaScript.
+      </div>
+  </div>
+  </div>
+
+  <div id="previewModal" class="modalOverlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modalCard">
+      <div class="modalHeader">
+        <h3 id="previewTitle">Preview</h3>
+        <button class="btn" id="previewCloseTop">Close</button>
+      </div>
+      <div class="modalBody">
+        <textarea id="previewText"></textarea>
+        <div class="small" style="margin-top:8px;">Edit if needed, then download.</div>
+      </div>
+      <div class="modalFooter">
+        <button class="btn" id="previewReset">Reset</button>
+        <button class="btn primary" id="previewDownload">Download</button>
+        <button class="btn" id="previewClose">Close</button>
       </div>
     </div>
   </div>
@@ -517,7 +542,375 @@ end;`;
       renderReport({ expectedTaxa, detectedTaxa: unionTaxa, locusStats, warnings });
 
       statusEl.textContent = `Report OK. Detected taxa: ${unionTaxa.length}.`;
-      document.getElementById('processBtn').disabled = false;
+    document.getElementById('processBtn').disabled = false;
+    });
+
+    function pickFillGapChar() {
+      // NEXUS GAP is '-', and most pipelines expect '-' for missing blocks.
+      return '-';
+    }
+
+    function buildKeptIndices(seqsMap, rawLen, gapSet) {
+      const nTaxa = seqsMap.size;
+      const gapCounts = new Uint32Array(rawLen);
+      for (const seq of seqsMap.values()) {
+        for (let i = 0; i < rawLen; i++) {
+          if (gapSet.has(seq[i])) gapCounts[i]++;
+        }
+      }
+      const kept = [];
+      for (let i = 0; i < rawLen; i++) {
+        if (gapCounts[i] !== nTaxa) kept.push(i);
+      }
+      return kept;
+    }
+
+    function trimAlignment(seqsMap, rawLen, gapSet, doTrim) {
+      if (!doTrim) {
+        return { seqs: new Map(seqsMap), len: rawLen };
+      }
+      if (rawLen === 0 || seqsMap.size === 0) {
+        return { seqs: new Map(seqsMap), len: 0 };
+      }
+      const keptIdx = buildKeptIndices(seqsMap, rawLen, gapSet);
+      const out = new Map();
+      for (const [hdr, seq] of seqsMap.entries()) {
+        let parts = [];
+        for (let k = 0; k < keptIdx.length; k++) {
+          parts.push(seq[keptIdx[k]]);
+        }
+        out.set(hdr, parts.join(''));
+      }
+      return { seqs: out, len: keptIdx.length };
+    }
+
+    function repeatChar(ch, n) {
+      if (n <= 0) return '';
+      return ch.repeat(n);
+    }
+
+    function wrapFasta(seq, width = 80) {
+      let out = '';
+      for (let i = 0; i < seq.length; i += width) {
+        out += seq.slice(i, i + width) + '\n';
+      }
+      return out;
+    }
+
+    function nexusQuote(label) {
+      // Single-quote and escape embedded single quotes by doubling.
+      const s = String(label).replaceAll("'", "''");
+      return `'${s}'`;
+    }
+
+    function buildNexusMatrix(taxaOrder, seqMap, nchar) {
+      const ntax = taxaOrder.length;
+      const lines = [];
+      lines.push('#NEXUS');
+      lines.push('');
+      lines.push('BEGIN TAXA;');
+      lines.push(`  DIMENSIONS NTAX=${ntax};`);
+      lines.push('  TAXLABELS');
+      for (const t of taxaOrder) {
+        lines.push(`    ${nexusQuote(t)}`);
+      }
+      lines.push('  ;');
+      lines.push('END;');
+      lines.push('');
+      lines.push('BEGIN CHARACTERS;');
+      lines.push(`  DIMENSIONS NCHAR=${nchar};`);
+      lines.push('  FORMAT DATATYPE=DNA MISSING=? GAP=-;');
+      lines.push('  MATRIX');
+      for (const t of taxaOrder) {
+        const seq = seqMap.get(t) || '';
+        lines.push(`    ${nexusQuote(t)}    ${seq}`);
+      }
+      lines.push('  ;');
+      lines.push('END;');
+      lines.push('');
+      return lines.join('\n');
+    }
+
+    function buildCharsetsAndModels(lociIncluded) {
+      // lociIncluded: [{name, len, lset, prset, partIndex}]
+      let pos = 1;
+      const charsets = [];
+      for (const L of lociIncluded) {
+        const start = pos;
+        const end = pos + L.len - 1;
+        charsets.push({ name: L.name, start, end });
+        pos = end + 1;
+      }
+
+      const lines = [];
+      for (const cs of charsets) {
+        lines.push(`\tcharset ${cs.name} =  ${cs.start}- ${cs.end};`);
+      }
+
+      const names = charsets.map(c => c.name);
+      lines.push(`\tpartition currentPartition = ${names.length}: ${names.join(', ')};`);
+      lines.push('\tset partition = currentPartition;');
+
+      // Group lset by exact string
+      const lsetGroups = new Map();
+      for (const L of lociIncluded) {
+        const key = (L.lset || '').trim();
+        if (!key) continue;
+        if (!lsetGroups.has(key)) lsetGroups.set(key, []);
+        lsetGroups.get(key).push(L.partIndex);
+      }
+      for (const [args, idxs] of lsetGroups.entries()) {
+        const apply = idxs.length > 1 ? `(${idxs.join(',')})` : `(${idxs[0]})`;
+        lines.push(`\tlset applyto=${apply} ${args};`);
+      }
+
+      // Group prset by exact string (skip blank)
+      const prsetGroups = new Map();
+      for (const L of lociIncluded) {
+        const key = (L.prset || '').trim();
+        if (!key) continue;
+        if (!prsetGroups.has(key)) prsetGroups.set(key, []);
+        prsetGroups.get(key).push(L.partIndex);
+      }
+      for (const [args, idxs] of prsetGroups.entries()) {
+        const apply = idxs.length > 1 ? `(${idxs.join(',')})` : `(${idxs[0]})`;
+        lines.push(`\tprset applyto=${apply} ${args};`);
+      }
+
+      return lines.join('\n');
+    }
+
+    function injectMbDynamic(template, dynamicBlock) {
+      const lines = String(template).split(/\r?\n/);
+      let start = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (/^\s*charset\b/i.test(lines[i])) { start = i; break; }
+      }
+      if (start === -1) {
+        throw new Error('MrBayes template: could not find any "charset" line to replace.');
+      }
+      let end = -1;
+      for (let i = start; i < lines.length; i++) {
+        if (/^\s*unlink\b/i.test(lines[i])) { end = i; break; }
+      }
+      if (end === -1) end = lines.length;
+
+      const dynLines = String(dynamicBlock).trimEnd().split('\n');
+      const out = [...lines.slice(0, start), ...dynLines, ...lines.slice(end)];
+      return out.join('\n');
+    }
+
+    function injectOutgroup(mpTemplate, outgroupName) {
+      const quoted = nexusQuote(outgroupName);
+      const re = /(^\s*)outgroup\b.*$/im;
+      if (!re.test(mpTemplate)) {
+        // If no outgroup line exists, just insert after BEGIN PAUP;
+        return mpTemplate.replace(/begin\s+paup\s*;/i, match => `${match}\n       outgroup ${quoted};`);
+      }
+      return mpTemplate.replace(re, (m, indent) => `${indent}outgroup ${quoted};`);
+    }
+
+    function downloadText(filename, content) {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    // Preview modal wiring
+    const previewModal = document.getElementById('previewModal');
+    const previewTitle = document.getElementById('previewTitle');
+    const previewText = document.getElementById('previewText');
+    const previewDownloadBtn = document.getElementById('previewDownload');
+    const previewResetBtn = document.getElementById('previewReset');
+    const previewCloseBtn = document.getElementById('previewClose');
+    const previewCloseTopBtn = document.getElementById('previewCloseTop');
+
+    let PREVIEW_KIND = null;
+
+    function openPreview(kind, title, content) {
+      PREVIEW_KIND = kind;
+      previewTitle.textContent = title;
+      previewText.value = content;
+      previewModal.style.display = 'flex';
+      previewModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closePreview() {
+      previewModal.style.display = 'none';
+      previewModal.setAttribute('aria-hidden', 'true');
+      PREVIEW_KIND = null;
+    }
+
+    previewCloseBtn.addEventListener('click', closePreview);
+    previewCloseTopBtn.addEventListener('click', closePreview);
+    previewModal.addEventListener('click', (e) => {
+      if (e.target === previewModal) closePreview();
+    });
+
+    // Outputs stored after processing
+    APP_STATE.outputs = null;
+
+    document.getElementById('processBtn').addEventListener('click', async () => {
+      const statusEl = document.getElementById('status');
+      const report = APP_STATE.report;
+      if (!report) {
+        statusEl.textContent = 'Run Report first.';
+        return;
+      }
+
+      statusEl.textContent = 'Processing / concatenating…';
+
+      const gapSet = getGapSet();
+      const doTrim = report.doTrim;
+      const fillGap = pickFillGapChar();
+
+      // Build per-locus trimmed seq maps
+      const lociProcessed = [];
+      const warnings = [];
+
+      for (const ls of report.locusStats) {
+        const rawLen = ls.rawLen;
+        const aligned = ls.parsed.seqs;
+        const trimmed = trimAlignment(aligned, rawLen, gapSet, doTrim);
+        const len = trimmed.len;
+
+        lociProcessed.push({
+          name: ls.locus,
+          len,
+          seqs: trimmed.seqs,
+          lset: (ls.lset || '').trim(),
+          prset: (ls.prset || '').trim(),
+        });
+      }
+
+      // Decide which loci are included in partitions (len > 0)
+      const lociIncluded = [];
+      let partIndex = 0;
+      for (const L of lociProcessed) {
+        if (L.len <= 0) {
+          warnings.push(`Locus ${L.name} has length 0 after trimming; it will be omitted from partitions.`);
+          continue;
+        }
+        if (!L.lset) {
+          statusEl.textContent = `Cannot proceed: MB lset is missing for locus ${L.name}.`;
+          return;
+        }
+        partIndex += 1;
+        lociIncluded.push({ ...L, partIndex });
+      }
+
+      // Concatenate
+      const taxaOrder = report.detectedTaxa;
+      const concatMap = new Map();
+      let totalLen = 0;
+      for (const L of lociProcessed) totalLen += L.len;
+
+      for (const taxon of taxaOrder) {
+        let parts = [];
+        for (const L of lociProcessed) {
+          const seq = L.seqs.get(taxon);
+          if (seq !== undefined) {
+            parts.push(seq);
+          } else {
+            parts.push(repeatChar(fillGap, L.len));
+          }
+        }
+        concatMap.set(taxon, parts.join(''));
+      }
+
+      // FASTA output
+      let fastaOut = '';
+      for (const taxon of taxaOrder) {
+        fastaOut += `>${taxon}\n`;
+        fastaOut += wrapFasta(concatMap.get(taxon) || '', 80);
+      }
+
+      // NEXUS matrix (shared for MB and MP)
+      const nexusMatrix = buildNexusMatrix(taxaOrder, concatMap, totalLen);
+
+      // Build MB block by injecting dynamic section into template
+      const mbTemplate = document.getElementById('mbTemplate').value;
+      const dynamic = buildCharsetsAndModels(lociIncluded);
+      let mbBlock;
+      try {
+        mbBlock = injectMbDynamic(mbTemplate, dynamic);
+      } catch (e) {
+        statusEl.textContent = `MrBayes template error: ${e.message || e}`;
+        return;
+      }
+
+      const nexusMb = nexusMatrix + '\n' + mbBlock.trim() + '\n';
+
+      // MP block with outgroup injection
+      const mpTemplate = document.getElementById('mpTemplate').value;
+      const outSel = document.getElementById('outgroupSelect');
+      const outgroup = outSel.value;
+      if (!outgroup) {
+        statusEl.textContent = 'Select an outgroup (for MP) before processing.';
+        return;
+      }
+      const mpBlock = injectOutgroup(mpTemplate, outgroup);
+      const nexusMp = nexusMatrix + '\n' + mpBlock.trim() + '\n';
+
+      APP_STATE.outputs = {
+        fasta: fastaOut,
+        nexusMb,
+        nexusMp,
+        originals: { nexusMb, nexusMp },
+        warnings,
+      };
+
+      // Enable downloads
+      document.getElementById('dlFasta').disabled = false;
+      document.getElementById('dlMb').disabled = false;
+      document.getElementById('dlMp').disabled = false;
+
+      statusEl.textContent = warnings.length
+        ? `Processing complete with warnings: ${warnings.length}. (See report warnings in MB/MP output step.)`
+        : 'Processing complete. Ready to download.';
+
+      if (warnings.length) {
+        const panel = document.getElementById('reportPanel');
+        const warnHtml = `
+          <div style="margin:8px 0; padding:8px 10px; border:1px solid #f0c36d; border-radius:8px; background:#fff7e6;">
+            <strong>Process warnings</strong><br>${warnings.map(w => `• ${escapeHtml(w)}`).join('<br>')}
+          </div>`;
+        panel.insertAdjacentHTML('afterbegin', warnHtml);
+      }
+    });
+
+    document.getElementById('dlFasta').addEventListener('click', () => {
+      if (!APP_STATE.outputs) return;
+      downloadText('supermatrix.fasta', APP_STATE.outputs.fasta);
+    });
+
+    document.getElementById('dlMb').addEventListener('click', () => {
+      if (!APP_STATE.outputs) return;
+      openPreview('mb', 'MrBayes NEXUS (editable)', APP_STATE.outputs.nexusMb);
+    });
+
+    document.getElementById('dlMp').addEventListener('click', () => {
+      if (!APP_STATE.outputs) return;
+      openPreview('mp', 'MP NEXUS (editable)', APP_STATE.outputs.nexusMp);
+    });
+
+    previewResetBtn.addEventListener('click', () => {
+      if (!APP_STATE.outputs || !PREVIEW_KIND) return;
+      if (PREVIEW_KIND === 'mb') previewText.value = APP_STATE.outputs.originals.nexusMb;
+      if (PREVIEW_KIND === 'mp') previewText.value = APP_STATE.outputs.originals.nexusMp;
+    });
+
+    previewDownloadBtn.addEventListener('click', () => {
+      if (!PREVIEW_KIND) return;
+      const content = previewText.value;
+      if (PREVIEW_KIND === 'mb') downloadText('supermatrix_mrbayes.nex', content);
+      if (PREVIEW_KIND === 'mp') downloadText('supermatrix_mp.nex', content);
     });
   </script>
 </body>
