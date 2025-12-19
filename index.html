@@ -9,12 +9,23 @@
     h1 { margin: 0 0 6px 0; }
     .muted { color: #555; margin: 0 0 16px 0; }
     .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: end; }
-    .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; margin: 14px 0; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; margin: 14px 0; overflow: hidden; }
     label { display: block; font-size: 13px; color: #333; margin-bottom: 6px; }
     input[type="text"], input[type="number"], textarea, select {
-      width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px;
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 14px;
+      box-sizing: border-box;
     }
-    textarea { min-height: 90px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    textarea {
+      min-height: 90px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      resize: none;              /* prevents drag-handle overlap */
+      max-width: 100%;
+      box-sizing: border-box;
+    }
     table { width: 100%; border-collapse: collapse; }
     th, td { border-bottom: 1px solid #eee; padding: 10px 8px; vertical-align: top; }
     th { text-align: left; font-size: 13px; color: #333; }
@@ -24,7 +35,7 @@
     .small { font-size: 12px; color: #666; }
     .status { padding: 8px 10px; border-radius: 8px; background: #f6f6f6; font-family: ui-monospace, monospace; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+    @media (max-width: 1000px) { .grid2 { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -56,14 +67,19 @@
   </div>
 
   <div class="card">
-    <div class="row" style="justify-content:space-between;">
+    <div class="row" style="justify-content:space-between; align-items:flex-end;">
       <div>
         <h2 style="margin:0 0 6px 0;">Loci</h2>
-        <div class="small">Add loci in order (ITS, LSU, RPB2…). Upload aligned FASTA for each.</div>
+        <div class="small">Set the number of loci, then fill in names + upload aligned FASTA for each row.</div>
       </div>
-      <div class="row">
-        <button class="btn" id="addRowBtn">+ Add locus</button>
-        <button class="btn" id="removeRowBtn">Remove last</button>
+
+      <!-- NEW: set number of loci -->
+      <div class="row" style="align-items:flex-end;">
+        <div style="min-width:160px;">
+          <label>Number of loci</label>
+          <input id="lociCount" type="number" min="1" value="5" />
+        </div>
+        <button class="btn" id="setLociBtn">Set rows</button>
       </div>
     </div>
 
@@ -89,7 +105,7 @@
   <div class="card grid2">
     <div>
       <h2 style="margin:0 0 6px 0;">Templates</h2>
-      <div class="small">These are editable and will be shown again before download.</div>
+      <div class="small">Editable. These will be shown again before download.</div>
 
       <label style="margin-top:10px;">MrBayes block template (we will replace charsets/partition/lset/prset)</label>
       <textarea id="mbTemplate"></textarea>
@@ -173,6 +189,7 @@ end;`;
     document.getElementById('mpTemplate').value = MP_BLOCK;
 
     const lociBody = document.getElementById('lociBody');
+
     function addRow(locus="", lset="", prset="") {
       const tr = document.createElement('tr');
 
@@ -204,17 +221,25 @@ end;`;
       lociBody.appendChild(tr);
     }
 
-    document.getElementById('addRowBtn').addEventListener('click', () => addRow());
-    document.getElementById('removeRowBtn').addEventListener('click', () => {
-      if (lociBody.lastElementChild) lociBody.removeChild(lociBody.lastElementChild);
+    function setLociRows(n) {
+      const defaults = ["ITS", "LSU", "RPB2", "TEF", "TUB"];
+      lociBody.innerHTML = "";
+      for (let i = 0; i < n; i++) addRow(defaults[i] || "");
+    }
+
+    document.getElementById('setLociBtn').addEventListener('click', () => {
+      const raw = document.getElementById('lociCount').value;
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n) || n < 1) {
+        document.getElementById('status').textContent = "Please enter a valid number of loci (>= 1), then click Set rows.";
+        return;
+      }
+      setLociRows(n);
+      document.getElementById('status').textContent = `Set loci rows to ${n}. Upload FASTA files and click Report.`;
     });
 
-    // Start with 5 common loci rows
-    addRow("ITS");
-    addRow("LSU");
-    addRow("RPB2");
-    addRow("TEF");
-    addRow("TUB");
+    // Initialize rows from default value
+    setLociRows(parseInt(document.getElementById('lociCount').value, 10) || 5);
 
     // Buttons are wired later
     document.getElementById('reportBtn').addEventListener('click', () => {
