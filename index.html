@@ -1,0 +1,1201 @@
+A Concat
+Con<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FASTA Concat</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:rgba(255,255,255,.06);
+      --panel2:rgba(255,255,255,.09);
+      --text:rgba(255,255,255,.92);
+      --muted:rgba(255,255,255,.72);
+      --border:rgba(255,255,255,.12);
+      --accent:#22c55e;
+      --accent2:#60a5fa;
+      --warn:#f59e0b;
+      --err:#ef4444;
+      --shadow:0 18px 50px rgba(0,0,0,.35);
+      --radius:14px;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 700px at 20% 0%, rgba(96,165,250,.18), transparent 60%),
+        radial-gradient(900px 600px at 90% 10%, rgba(34,197,94,.16), transparent 55%),
+        radial-gradient(1000px 700px at 50% 100%, rgba(245,158,11,.10), transparent 60%),
+        var(--bg);
+      padding:22px;
+    }
+    header{
+      display:flex; gap:14px; flex-wrap:wrap;
+      align-items:baseline; justify-content:space-between;
+      margin-bottom:14px;
+    }
+    h1{ margin:0; font-size:22px; letter-spacing:.2px; }
+    .subtitle{ color:var(--muted); margin:6px 0 0 0; font-size:13px; }
+    .chipRow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .chip{
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:1.1fr .9fr;
+      gap:14px;
+      align-items:start;
+    }
+    @media (max-width:1100px){ .grid{ grid-template-columns:1fr; } }
+
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:14px;
+      overflow:hidden;
+    }
+    .card h2{ margin:0 0 8px 0; font-size:15px; }
+    .muted{ color:var(--muted); font-size:12px; }
+
+    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+    .field{ min-width:190px; flex:1; }
+    label{
+      display:block;
+      font-size:12px;
+      color:rgba(255,255,255,.82);
+      margin-bottom:6px;
+    }
+    input[type="text"], input[type="number"], textarea, select{
+      width:100%;
+      background:rgba(0,0,0,.20);
+      color:var(--text);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:13px;
+      outline:none;
+    }
+    input[type="file"]{ width:100%; color:var(--muted); font-size:12px; }
+    input[type="checkbox"]{ transform:translateY(1px); }
+
+    .btn{
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.06);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-size:13px;
+      transition:transform .06s ease, background .15s ease, border-color .15s ease;
+      user-select:none;
+      display:inline-flex; align-items:center; gap:8px;
+    }
+    .btn:hover{ background:rgba(255,255,255,.09); border-color:rgba(255,255,255,.18); }
+    .btn:active{ transform:translateY(1px); }
+    .btn.primary{
+      border-color:rgba(34,197,94,.35);
+      background:rgba(34,197,94,.12);
+    }
+    .btn.primary:hover{ background:rgba(34,197,94,.16); }
+    .btn.blue{
+      border-color:rgba(96,165,250,.35);
+      background:rgba(96,165,250,.12);
+    }
+    .btn.blue:hover{ background:rgba(96,165,250,.16); }
+    .btn:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
+
+    .status{
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+      background:rgba(0,0,0,.22);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:10px 12px;
+      color:rgba(255,255,255,.9);
+      font-size:12px;
+      min-height:40px;
+      display:flex;
+      align-items:center;
+    }
+
+    table{ width:100%; border-collapse:collapse; }
+    th, td{
+      border-bottom:1px solid rgba(255,255,255,.08);
+      padding:10px 8px;
+      vertical-align:top;
+      font-size:12px;
+    }
+    th{ color:rgba(255,255,255,.78); font-weight:600; }
+
+    .pillWarn{
+      margin:10px 0 0 0;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(245,158,11,.30);
+      background:rgba(245,158,11,.12);
+      font-size:12px;
+    }
+    .pillErr{
+      margin:10px 0 0 0;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(239,68,68,.30);
+      background:rgba(239,68,68,.12);
+      font-size:12px;
+    }
+
+    .modalOverlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      z-index:9999;
+    }
+    .modal{
+      width:min(1100px,100%);
+      max-height:92vh;
+      background:rgba(16,20,32,.98);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:16px;
+      box-shadow:0 30px 90px rgba(0,0,0,.6);
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+    }
+    .modalHeader{
+      padding:12px 14px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      border-bottom:1px solid rgba(255,255,255,.10);
+    }
+    .modalHeader h3{ margin:0; font-size:14px; }
+    .modalBody{ padding:12px 14px; overflow:auto; }
+    .modalBody textarea{
+      width:100%;
+      min-height:60vh;
+      resize:none;
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+      font-size:12px;
+      line-height:1.4;
+      background:rgba(0,0,0,.22);
+    }
+    .modalFooter{
+      padding:12px 14px;
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+      border-top:1px solid rgba(255,255,255,.10);
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>FASTA Concat</h1>
+    <div class="subtitle">Concatenate aligned FASTA loci, trim all-gap columns per locus, export FASTA + NEXUS (MrBayes/MP) + partitions.</div>
+  </div>
+  <div class="chipRow">
+    <span class="chip">Header matching: full header (no spaces)</span>
+    <span class="chip">Missing taxa: fill gaps</span>
+    <span class="chip">Trimming: per-locus all-gap columns</span>
+  </div>
+</header>
+
+<div class="grid">
+  <div class="card">
+    <h2>Inputs</h2>
+    <div class="row">
+      <div class="field">
+        <label>Expected total taxa (optional)</label>
+        <input id="expectedTaxa" type="number" min="1" placeholder="e.g., 50" />
+        <div class="muted">Flags possible typos if detected unique taxa ≠ expected.</div>
+      </div>
+
+      <div class="field">
+        <label>Gap characters for trimming</label>
+        <input id="gapChars" type="text" value="-" />
+        <div class="muted">Default “-”. Use “-.” if dots are used as gaps.</div>
+      </div>
+
+      <div class="field" style="min-width:220px;">
+        <label>&nbsp;</label>
+        <div class="row" style="align-items:center;">
+          <input id="trimGaps" type="checkbox" checked />
+          <span class="muted" style="font-size:13px;">Trim all-gap columns (per locus)</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:10px;"></div>
+
+    <div class="row" style="justify-content:space-between; align-items:flex-end;">
+      <div>
+        <h2 style="margin-bottom:4px;">Loci</h2>
+        <div class="muted">Set number of loci → name each locus → upload aligned FASTA → pick model settings.</div>
+      </div>
+      <div class="row" style="align-items:flex-end;">
+        <div style="min-width:160px;">
+          <label>Number of loci</label>
+          <input id="lociCount" type="number" min="1" value="5" />
+        </div>
+        <button type="button" class="btn" id="setLociBtn">Set rows</button>
+      </div>
+    </div>
+
+    <div style="overflow:auto; margin-top:10px;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:140px;">Locus</th>
+            <th style="width:260px;">FASTA file</th>
+            <th style="width:150px;">Protein-coding?</th>
+            <th style="width:120px;">nst</th>
+            <th style="width:150px;">rates</th>
+            <th style="width:220px;">statefreqpr</th>
+          </tr>
+        </thead>
+        <tbody id="lociBody"></tbody>
+      </table>
+    </div>
+
+    <div class="muted" style="margin-top:10px;">
+      Protein-coding checked → partition file will output <code>_pos1/_pos2/_pos3</code> with <code>\3</code>. (Use only for in-frame protein alignments.)
+    </div>
+
+    <div class="row" style="margin-top:12px;">
+      <button type="button" class="btn blue" id="editMbTemplateBtn">Edit MrBayes template</button>
+      <button type="button" class="btn blue" id="editMpTemplateBtn">Edit PAUP template</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Run</h2>
+
+    <div class="row">
+      <div class="field">
+        <label>Outgroup (for MP)</label>
+        <select id="outgroupSelect" disabled>
+          <option value="">Run Report first to populate taxa list</option>
+        </select>
+        <div class="muted">Pick from detected taxa to avoid typos.</div>
+      </div>
+    </div>
+
+    <div style="height:10px;"></div>
+
+    <div class="row">
+      <button type="button" class="btn primary" id="reportBtn">Report</button>
+      <button type="button" class="btn primary" id="processBtn" disabled>Process / Concatenate</button>
+    </div>
+
+    <div style="height:12px;"></div>
+
+    <label>Status</label>
+    <div id="status" class="status">Ready.</div>
+
+    <div id="reportPanel"></div>
+
+    <div style="height:14px;"></div>
+
+    <h2>Downloads</h2>
+    <div class="row">
+      <button type="button" class="btn" id="dlFasta" disabled>Download FASTA</button>
+      <button type="button" class="btn" id="dlParts" disabled>Download partitions</button>
+      <button type="button" class="btn" id="dlMb" disabled>Download NEXUS (MrBayes)</button>
+      <button type="button" class="btn" id="dlMp" disabled>Download NEXUS (MP)</button>
+    </div>
+
+    <div class="muted" style="margin-top:10px;">MrBayes/MP files are shown in an editable preview before download.</div>
+  </div>
+</div>
+
+<div id="previewModal" class="modalOverlay" aria-hidden="true">
+  <div class="modal">
+    <div class="modalHeader">
+      <h3 id="previewTitle">Preview</h3>
+      <button type="button" class="btn" id="previewCloseTop">Close</button>
+    </div>
+    <div class="modalBody">
+      <textarea id="previewText"></textarea>
+      <div class="muted" style="margin-top:8px;">Edit if needed, then download.</div>
+    </div>
+    <div class="modalFooter">
+      <button type="button" class="btn" id="previewReset">Reset</button>
+      <button type="button" class="btn primary" id="previewDownload">Download</button>
+      <button type="button" class="btn" id="previewClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="templateModal" class="modalOverlay" aria-hidden="true">
+  <div class="modal">
+    <div class="modalHeader">
+      <h3 id="templateTitle">Edit template</h3>
+      <button type="button" class="btn" id="templateCloseTop">Close</button>
+    </div>
+    <div class="modalBody">
+      <textarea id="templateText"></textarea>
+      <div class="muted" style="margin-top:8px;">
+        Placeholders supported:
+        <code>__CHARSETS__</code>, <code>__PARTITION__</code>, <code>__LSET_BLOCK__</code>, <code>__PRSET_BLOCK__</code>, <code>__OUTGROUP__</code>.
+      </div>
+    </div>
+    <div class="modalFooter">
+      <button type="button" class="btn" id="templateReset">Reset</button>
+      <button type="button" class="btn primary" id="templateSave">Save</button>
+      <button type="button" class="btn" id="templateClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const MB_TEMPLATE_DEFAULT = `begin mrbayes;
+  set autoclose=yes nowarn=yes;
+
+  [__CHARSETS__]
+
+  [__PARTITION__]
+
+  [__LSET_BLOCK__]
+
+  [__PRSET_BLOCK__]
+
+  unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all);
+  prset applyto=(all) ratepr=variable;
+
+  mcmcp ngen=10000000 relburnin=yes burninfrac=0.25 printfreq=1000 samplefreq=1000 nchains=4 savebrlens=yes;
+  mcmc;
+  sumt;
+end;`;
+
+  const MP_TEMPLATE_DEFAULT = `begin paup;
+  log file=log.txt;
+  pset collapse=minbrlen;
+  set maxtrees=1000 increase=no;
+
+  outgroup __OUTGROUP__;
+
+  set criterion=parsimony;
+  hsearch addseq=random nreps=1000; roottrees outroot=monophyl;
+  savetrees brlens=yes support=yes file=Mp_g.tre;
+  pscores ALL/ci=yes tl=yes hi=yes rc=yes ri=yes khtest=yes;
+  bootstrap nreps=1000 Keepall=yes / AddSeq=random nreps=10;
+  roottrees outroot=monophyl;
+  savetrees file=MPtree.tre from=1 to=1 savebootp=both maxdec=0;
+end;`;
+
+  const APP_STATE = {
+    report: null,
+    outputs: null,
+    templates: { mb: MB_TEMPLATE_DEFAULT, mp: MP_TEMPLATE_DEFAULT },
+    templateEditing: null
+  };
+
+  const lociBody = document.getElementById('lociBody');
+
+  function setStatus(msg){ document.getElementById('status').textContent = msg; }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'","&#039;");
+  }
+
+  function setBusy(isBusy, msg){
+    const rb = document.getElementById('reportBtn');
+    const pb = document.getElementById('processBtn');
+    if (rb) rb.disabled = isBusy;
+    if (pb) pb.disabled = isBusy || !APP_STATE.report;
+    if (msg) setStatus(msg);
+  }
+
+  function resetOutputsUI(){
+    APP_STATE.outputs = null;
+    for (const id of ['dlFasta','dlParts','dlMb','dlMp']) {
+      const el = document.getElementById(id);
+      if (el) el.disabled = true;
+    }
+  }
+
+  function makeSelect(options, value){
+    const sel = document.createElement('select');
+    for (const opt of options) {
+      const o = document.createElement('option');
+      o.value = opt.value;
+      o.textContent = opt.label;
+      sel.appendChild(o);
+    }
+    if (value != null) sel.value = value;
+    return sel;
+  }
+
+  function addRow(locus=""){
+    const tr = document.createElement('tr');
+
+    const td1 = document.createElement('td');
+    const locusInput = document.createElement('input');
+    locusInput.type = 'text';
+    locusInput.placeholder = 'ITS';
+    locusInput.value = locus;
+    td1.appendChild(locusInput);
+
+    const td2 = document.createElement('td');
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.fa,.fasta,.fas,.fna,.txt';
+    td2.appendChild(fileInput);
+
+    const td3 = document.createElement('td');
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex';
+    wrap.style.alignItems = 'center';
+    wrap.style.gap = '8px';
+    const prot = document.createElement('input');
+    prot.type = 'checkbox';
+    const lab = document.createElement('span');
+    lab.className = 'muted';
+    lab.style.fontSize = '12px';
+    lab.textContent = 'codon \\3';
+    wrap.appendChild(prot);
+    wrap.appendChild(lab);
+    td3.appendChild(wrap);
+
+    const td4 = document.createElement('td');
+    const nstSel = makeSelect([
+      {value:'2', label:'2 (HKY/K80)'},
+      {value:'4', label:'4'},
+      {value:'6', label:'6 (GTR)'}
+    ], '6');
+    td4.appendChild(nstSel);
+
+    const td5 = document.createElement('td');
+    const ratesSel = makeSelect([
+      {value:'equal', label:'equal'},
+      {value:'gamma', label:'gamma'},
+      {value:'propinv', label:'propinv'},
+      {value:'invgamma', label:'invgamma'}
+    ], 'invgamma');
+    td5.appendChild(ratesSel);
+
+    const td6 = document.createElement('td');
+    const sfSel = makeSelect([
+      {value:'', label:'(blank / default)'},
+      {value:'fixed(equal)', label:'fixed(equal)'}
+    ], '');
+    td6.appendChild(sfSel);
+
+    tr.appendChild(td1);
+    tr.appendChild(td2);
+    tr.appendChild(td3);
+    tr.appendChild(td4);
+    tr.appendChild(td5);
+    tr.appendChild(td6);
+
+    lociBody.appendChild(tr);
+  }
+
+  function setLociRows(n){
+    const defaults = ['ITS','LSU','RPB2','TEF','TUB'];
+    lociBody.innerHTML = '';
+    for (let i=0; i<n; i++) addRow(defaults[i] || '');
+  }
+
+  document.getElementById('setLociBtn').addEventListener('click', () => {
+    const n = parseInt(document.getElementById('lociCount').value, 10);
+    if (!Number.isFinite(n) || n < 1) { setStatus('Enter a valid number of loci (>=1).'); return; }
+    setLociRows(n);
+    setStatus(`Set loci rows to ${n}. Upload FASTA and run Report.`);
+  });
+
+  setLociRows(parseInt(document.getElementById('lociCount').value, 10) || 5);
+
+  function getLociRows(){
+    const rows = [];
+    for (const tr of lociBody.querySelectorAll('tr')) {
+      const locus = tr.children[0].querySelector('input')?.value?.trim() || '';
+      const file = tr.children[1].querySelector('input[type=file]')?.files?.[0] || null;
+      const isProtein = tr.children[2].querySelector('input[type=checkbox]')?.checked || false;
+      const nst = tr.children[3].querySelector('select')?.value || '6';
+      const rates = tr.children[4].querySelector('select')?.value || 'invgamma';
+      const statefreqpr = tr.children[5].querySelector('select')?.value || '';
+      rows.push({ locus, file, isProtein, nst, rates, statefreqpr });
+    }
+    return rows;
+  }
+
+  function getGapSet(){
+    const raw = (document.getElementById('gapChars').value || '-').trim();
+    const s = new Set();
+    for (const ch of raw) s.add(ch);
+    if (!s.has('-')) s.add('-');
+    return s;
+  }
+
+  function parseFasta(text){
+    const order = [];
+    const seqs = new Map();
+    let currentHeader = null;
+    let currentSeqParts = [];
+
+    const lines = text.split(/\r?\n/);
+    for (const rawLine of lines){
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (line.startsWith('>')){
+        if (currentHeader !== null){
+          const seq = currentSeqParts.join('').replace(/\s+/g,'');
+          if (seqs.has(currentHeader)) throw new Error(`Duplicate header found: ${currentHeader}`);
+          order.push(currentHeader);
+          seqs.set(currentHeader, seq);
+        }
+        const hdr = line.slice(1).trim();
+        if (!hdr) throw new Error("Empty FASTA header found: a line with '>' but no name.");
+        if (/\s/.test(hdr)) throw new Error(`Taxon name contains whitespace (not allowed): ${hdr}`);
+        currentHeader = hdr;
+        currentSeqParts = [];
+      } else {
+        if (currentHeader === null) throw new Error('FASTA parse error: sequence data found before any header (>).');
+        currentSeqParts.push(line);
+      }
+    }
+    if (currentHeader !== null){
+      const seq = currentSeqParts.join('').replace(/\s+/g,'');
+      if (seqs.has(currentHeader)) throw new Error(`Duplicate header found: ${currentHeader}`);
+      order.push(currentHeader);
+      seqs.set(currentHeader, seq);
+    }
+    if (order.length === 0) throw new Error('No FASTA records found.');
+    return { order, seqs };
+  }
+
+  function validateAligned(seqsMap){
+    let L = null;
+    for (const [hdr, seq] of seqsMap.entries()){
+      if (L === null) L = seq.length;
+      if (seq.length !== L) throw new Error(`Alignment length mismatch: ${hdr} has length ${seq.length}, expected ${L}.`);
+    }
+    return L ?? 0;
+  }
+
+  function computeTrimmedLength(seqsMap, rawLen, gapSet){
+    if (rawLen === 0) return 0;
+    const nTaxa = seqsMap.size;
+    if (nTaxa === 0) return 0;
+    const gapCounts = new Uint32Array(rawLen);
+    for (const seq of seqsMap.values()){
+      for (let i=0;i<rawLen;i++){
+        if (gapSet.has(seq[i])) gapCounts[i]++;
+      }
+    }
+    let kept = 0;
+    for (let i=0;i<rawLen;i++){
+      if (gapCounts[i] !== nTaxa) kept++;
+    }
+    return kept;
+  }
+
+  function buildKeptIndices(seqsMap, rawLen, gapSet){
+    const nTaxa = seqsMap.size;
+    const gapCounts = new Uint32Array(rawLen);
+    for (const seq of seqsMap.values()){
+      for (let i=0;i<rawLen;i++){
+        if (gapSet.has(seq[i])) gapCounts[i]++;
+      }
+    }
+    const kept = [];
+    for (let i=0;i<rawLen;i++){
+      if (gapCounts[i] !== nTaxa) kept.push(i);
+    }
+    return kept;
+  }
+
+  function trimAlignment(seqsMap, rawLen, gapSet, doTrim){
+    if (!doTrim) return { seqs: new Map(seqsMap), len: rawLen };
+    if (rawLen === 0 || seqsMap.size === 0) return { seqs: new Map(seqsMap), len: 0 };
+    const keptIdx = buildKeptIndices(seqsMap, rawLen, gapSet);
+    const out = new Map();
+    for (const [hdr, seq] of seqsMap.entries()){
+      const parts = [];
+      for (let k=0;k<keptIdx.length;k++) parts.push(seq[keptIdx[k]]);
+      out.set(hdr, parts.join(''));
+    }
+    return { seqs: out, len: keptIdx.length };
+  }
+
+  function repeatChar(ch, n){ return n <= 0 ? '' : ch.repeat(n); }
+
+  function wrapFasta(seq, width=80){
+    let out = '';
+    for (let i=0;i<seq.length;i+=width) out += seq.slice(i,i+width) + '\n';
+    return out;
+  }
+
+  function nexusToken(label){
+    const s = String(label).trim();
+    if (!s) throw new Error('Empty taxon name detected.');
+    if (/\s/.test(s)) throw new Error(`Taxon name contains whitespace (not allowed): ${s}`);
+    if (/[;\[\]()]/.test(s)) throw new Error(`Taxon name contains illegal NEXUS characters: ${s}`);
+    return s;
+  }
+
+  function buildNexusDataBlock(taxaOrder, seqMap, nchar){
+    const ntax = taxaOrder.length;
+    const lines = [];
+    lines.push('#NEXUS');
+    lines.push('');
+    lines.push('BEGIN DATA;');
+    lines.push(`  DIMENSIONS NEWTAXA NTAX=${ntax} NCHAR=${nchar};`);
+    lines.push('  FORMAT DATATYPE=DNA MISSING=? GAP=-;');
+    lines.push('  MATRIX');
+    for (const t of taxaOrder){
+      const name = nexusToken(t);
+      const seq = seqMap.get(t) || '';
+      lines.push(`  ${name}    ${seq}`);
+    }
+    lines.push('  ;');
+    lines.push('END;');
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  function buildCharsetsAndModels(lociIncluded){
+    let pos = 1;
+    const charsets = [];
+    for (const L of lociIncluded){
+      const start = pos;
+      const end = pos + L.len - 1;
+      charsets.push({ name: L.name, start, end, partIndex: L.partIndex });
+      pos = end + 1;
+    }
+
+    const charsetLines = charsets.map(cs => `  charset ${cs.name} = ${cs.start}-${cs.end};`);
+
+    const partNames = charsets.map(cs => cs.name);
+    const partitionLines = [
+      `  partition currentPartition = ${partNames.length}: ${partNames.join(', ')};`,
+      `  set partition = currentPartition;`
+    ];
+
+    const lsetGroups = new Map();
+    for (const L of lociIncluded){
+      const args = `nst=${L.nst} rates=${L.rates}`;
+      if (!lsetGroups.has(args)) lsetGroups.set(args, []);
+      lsetGroups.get(args).push(L.partIndex);
+    }
+    const lsetLines = [];
+    for (const [args, idxs] of lsetGroups.entries()){
+      const apply = idxs.length > 1 ? `(${idxs.join(',')})` : `(${idxs[0]})`;
+      lsetLines.push(`  lset applyto=${apply} ${args};`);
+    }
+
+    const prsetGroups = new Map();
+    for (const L of lociIncluded){
+      const sf = (L.statefreqpr || '').trim();
+      if (!sf) continue;
+      const args = `statefreqpr=${sf}`;
+      if (!prsetGroups.has(args)) prsetGroups.set(args, []);
+      prsetGroups.get(args).push(L.partIndex);
+    }
+    const prsetLines = [];
+    for (const [args, idxs] of prsetGroups.entries()){
+      const apply = idxs.length > 1 ? `(${idxs.join(',')})` : `(${idxs[0]})`;
+      prsetLines.push(`  prset applyto=${apply} ${args};`);
+    }
+
+    return {
+      charsets: charsetLines.join('\n'),
+      partition: partitionLines.join('\n'),
+      lsetBlock: lsetLines.join('\n'),
+      prsetBlock: prsetLines.join('\n')
+    };
+  }
+
+  function fillMbTemplate(template, pieces){
+    const mustHave = ['__CHARSETS__','__PARTITION__','__LSET_BLOCK__','__PRSET_BLOCK__'];
+    for (const token of mustHave){
+      if (!template.includes(token)) throw new Error(`MrBayes template missing placeholder: ${token}`);
+    }
+    return template
+      .replaceAll('__CHARSETS__', pieces.charsets || '')
+      .replaceAll('__PARTITION__', pieces.partition || '')
+      .replaceAll('__LSET_BLOCK__', pieces.lsetBlock || '')
+      .replaceAll('__PRSET_BLOCK__', pieces.prsetBlock || '');
+  }
+
+  function fillMpTemplate(template, outgroup){
+    if (!template.includes('__OUTGROUP__')) throw new Error('PAUP template missing placeholder: __OUTGROUP__');
+    return template.replaceAll('__OUTGROUP__', nexusToken(outgroup));
+  }
+
+  function buildPartitionFile(lociProcessed){
+    let pos = 1;
+    const lines = [];
+    for (const L of lociProcessed){
+      const len = L.len;
+      if (!len || len <= 0) continue;
+      const start = pos;
+      const end = pos + len - 1;
+
+      if (L.isProtein){
+        lines.push(`DNA, ${L.name}_pos1 = ${start}-${end}\\3`);
+        if (len >= 2) lines.push(`DNA, ${L.name}_pos2 = ${start+1}-${end}\\3`);
+        if (len >= 3) lines.push(`DNA, ${L.name}_pos3 = ${start+2}-${end}\\3`);
+      } else {
+        lines.push(`DNA, ${L.name} = ${start}-${end}`);
+      }
+      pos = end + 1;
+    }
+    return lines.join('\n') + '\n';
+  }
+
+  function downloadText(filename, content){
+    const blob = new Blob([content], {type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function setOutgroupOptions(taxaOrder){
+    const sel = document.getElementById('outgroupSelect');
+    sel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = 'Select outgroup…';
+    sel.appendChild(ph);
+    for (const t of taxaOrder){
+      const opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      sel.appendChild(opt);
+    }
+    sel.disabled = taxaOrder.length === 0;
+  }
+
+  function renderReport({ expectedTaxa, taxaOrder, locusStats, warnings }){
+    const panel = document.getElementById('reportPanel');
+    const warnHtml = warnings.length ? `
+      <div class="pillWarn">
+        <strong>Warnings</strong><br>
+        ${warnings.map(w => `• ${escapeHtml(w)}`).join('<br>')}
+      </div>` : '';
+
+    const headerHtml = `
+      <div style="margin-top:12px;">
+        <div class="muted"><strong style="color:rgba(255,255,255,.9);">Detected total taxa (unique):</strong> ${taxaOrder.length}
+        ${expectedTaxa != null ? `&nbsp; | &nbsp; <strong style="color:rgba(255,255,255,.9);">Expected:</strong> ${expectedTaxa}` : ''}</div>
+      </div>
+    `;
+
+    const rows = locusStats.map(s => `
+      <tr>
+        <td>${escapeHtml(s.locus || '(unnamed)')}</td>
+        <td>${s.taxaCount}</td>
+        <td>${s.rawLen}</td>
+        <td>${s.trimmedLen}</td>
+      </tr>
+    `).join('');
+
+    const tableHtml = `
+      <div style="margin-top:10px; overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Locus</th>
+              <th>Taxa in locus</th>
+              <th>Raw length</th>
+              <th>Trimmed length</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+
+    panel.innerHTML = headerHtml + warnHtml + tableHtml;
+  }
+
+  document.getElementById('reportBtn').addEventListener('click', async () => {
+    resetOutputsUI();
+    document.getElementById('reportPanel').innerHTML = '';
+    setBusy(true, 'Running report…');
+
+    const rows = getLociRows();
+    if (rows.length === 0){ setBusy(false); setStatus('Add at least 1 locus.'); return; }
+
+    const expectedRaw = document.getElementById('expectedTaxa').value;
+    const expectedTaxa = expectedRaw ? parseInt(expectedRaw, 10) : null;
+
+    const doTrim = document.getElementById('trimGaps').checked;
+    const gapSet = getGapSet();
+
+    const errors = [];
+    const warnings = [];
+    const unionSet = new Set();
+    let baseOrder = null;
+    const locusStats = [];
+
+    for (let i=0;i<rows.length;i++){
+      const r = rows[i];
+      if (!r.locus){ errors.push(`Row ${i+1}: Locus name is required.`); continue; }
+      if (!r.file){ errors.push(`Row ${i+1} (${r.locus}): Please choose a FASTA file.`); continue; }
+
+      try{
+        const text = await r.file.text();
+        const parsed = parseFasta(text);
+        const rawLen = validateAligned(parsed.seqs);
+        const trimmedLen = doTrim ? computeTrimmedLength(parsed.seqs, rawLen, gapSet) : rawLen;
+
+        if (baseOrder === null) baseOrder = parsed.order.slice();
+        for (const hdr of parsed.order) unionSet.add(hdr);
+
+        locusStats.push({
+          locus: r.locus,
+          taxaCount: parsed.order.length,
+          rawLen,
+          trimmedLen,
+          parsed,
+          nst: r.nst,
+          rates: r.rates,
+          statefreqpr: r.statefreqpr,
+          isProtein: r.isProtein
+        });
+      } catch(e){
+        errors.push(`Row ${i+1} (${r.locus}): ${e.message || e}`);
+      }
+    }
+
+    if (errors.length){
+      setBusy(false);
+      setStatus(`Report failed: ${errors.length} error(s).`);
+      document.getElementById('reportPanel').innerHTML = `
+        <div class="pillErr">
+          <strong>Errors</strong><br>
+          ${errors.map(e => `• ${escapeHtml(e)}`).join('<br>')}
+        </div>
+      `;
+      document.getElementById('outgroupSelect').disabled = true;
+      APP_STATE.report = null;
+      return;
+    }
+
+    const taxaOrder = [];
+    const seen = new Set();
+    if (baseOrder){
+      for (const t of baseOrder){
+        if (unionSet.has(t) && !seen.has(t)){ taxaOrder.push(t); seen.add(t); }
+      }
+    }
+    for (const t of unionSet){
+      if (!seen.has(t)){ taxaOrder.push(t); seen.add(t); }
+    }
+
+    if (expectedTaxa != null && Number.isFinite(expectedTaxa) && taxaOrder.length !== expectedTaxa){
+      warnings.push(`Expected ${expectedTaxa} taxa, but detected ${taxaOrder.length}. This often indicates a header typo/inconsistency.`);
+    }
+
+    APP_STATE.report = { expectedTaxa, taxaOrder, locusStats, doTrim };
+
+    setOutgroupOptions(taxaOrder);
+    renderReport({ expectedTaxa, taxaOrder, locusStats, warnings });
+
+    setStatus(`Report OK. Detected taxa: ${taxaOrder.length}.`);
+    document.getElementById('processBtn').disabled = false;
+    setBusy(false);
+  });
+
+  function pickFillGapChar(){ return '-'; }
+
+  async function runProcess(){
+    setStatus('Processing…');
+    resetOutputsUI();
+
+    const report = APP_STATE.report;
+    if (!report){ setStatus('Run Report first.'); return; }
+
+    setBusy(true, 'Processing / concatenating…');
+    await new Promise(requestAnimationFrame);
+
+    try{
+      const doTrim = report.doTrim;
+      const gapSet = getGapSet();
+      const fillGap = pickFillGapChar();
+
+      const lociProcessed = [];
+      const warnings = [];
+
+      for (const ls of report.locusStats){
+        const trimmed = trimAlignment(ls.parsed.seqs, ls.rawLen, gapSet, doTrim);
+        lociProcessed.push({
+          name: ls.locus,
+          len: trimmed.len,
+          seqs: trimmed.seqs,
+          nst: ls.nst,
+          rates: ls.rates,
+          statefreqpr: ls.statefreqpr,
+          isProtein: !!ls.isProtein
+        });
+      }
+
+      const lociIncluded = [];
+      let partIndex = 0;
+      for (const L of lociProcessed){
+        if (L.len <= 0){
+          warnings.push(`Locus ${L.name} has length 0 after trimming; omitted from charsets/partitions.`);
+          continue;
+        }
+        partIndex += 1;
+        lociIncluded.push({ ...L, partIndex });
+      }
+
+      const taxaOrder = report.taxaOrder;
+      const concatMap = new Map();
+      let totalLen = 0;
+      for (const L of lociProcessed) totalLen += L.len;
+
+      for (const taxon of taxaOrder){
+        const parts = [];
+        for (const L of lociProcessed){
+          const seq = L.seqs.get(taxon);
+          parts.push(seq !== undefined ? seq : repeatChar(fillGap, L.len));
+        }
+        concatMap.set(taxon, parts.join(''));
+      }
+
+      let fastaOut = '';
+      for (const taxon of taxaOrder){
+        fastaOut += `>${taxon}\n`;
+        fastaOut += wrapFasta(concatMap.get(taxon) || '', 80);
+      }
+
+      const partitionsTxt = buildPartitionFile(lociProcessed);
+      const nexusData = buildNexusDataBlock(taxaOrder, concatMap, totalLen);
+
+      const mbPieces = buildCharsetsAndModels(lociIncluded);
+      const mbBlock = fillMbTemplate(APP_STATE.templates.mb, mbPieces);
+      const nexusMb = nexusData + '\n' + mbBlock.trim() + '\n';
+
+      const outgroup = document.getElementById('outgroupSelect').value;
+      let nexusMp = null;
+      if (!outgroup){
+        warnings.push('No outgroup selected yet: MP output will stay disabled until you choose one.');
+      } else {
+        const mpBlock = fillMpTemplate(APP_STATE.templates.mp, outgroup);
+        nexusMp = nexusData + '\n' + mpBlock.trim() + '\n';
+      }
+
+      APP_STATE.outputs = {
+        fasta: fastaOut,
+        partitions: partitionsTxt,
+        nexusMb,
+        nexusMp,
+        originals: { nexusMb, nexusMp },
+        warnings
+      };
+
+      document.getElementById('dlFasta').disabled = false;
+      document.getElementById('dlParts').disabled = false;
+      document.getElementById('dlMb').disabled = false;
+      document.getElementById('dlMp').disabled = (nexusMp === null);
+
+      if (warnings.length){
+        document.getElementById('reportPanel').insertAdjacentHTML('afterbegin', `
+          <div class="pillWarn">
+            <strong>Process warnings</strong><br>
+            ${warnings.map(w => `• ${escapeHtml(w)}`).join('<br>')}
+          </div>
+        `);
+      }
+
+      setStatus('Done. Ready to download.');
+      setBusy(false);
+
+    } catch(e){
+      setBusy(false);
+      setStatus(`Process failed: ${e.message || e}`);
+      document.getElementById('reportPanel').insertAdjacentHTML('afterbegin', `
+        <div class="pillErr">
+          <strong>Process error</strong><br>
+          ${escapeHtml(e.message || e)}
+        </div>
+      `);
+    }
+  }
+
+  document.getElementById('processBtn').addEventListener('click', runProcess);
+
+  const previewModal = document.getElementById('previewModal');
+  const previewTitle = document.getElementById('previewTitle');
+  const previewText = document.getElementById('previewText');
+  let PREVIEW_KIND = null;
+
+  function openPreview(kind, title, content){
+    PREVIEW_KIND = kind;
+    previewTitle.textContent = title;
+    previewText.value = content || '';
+    previewModal.style.display = 'flex';
+    previewModal.setAttribute('aria-hidden','false');
+  }
+  function closePreview(){
+    previewModal.style.display = 'none';
+    previewModal.setAttribute('aria-hidden','true');
+    PREVIEW_KIND = null;
+  }
+
+  document.getElementById('previewClose').addEventListener('click', closePreview);
+  document.getElementById('previewCloseTop').addEventListener('click', closePreview);
+  previewModal.addEventListener('click', (e) => { if (e.target === previewModal) closePreview(); });
+
+  document.getElementById('previewReset').addEventListener('click', () => {
+    if (!APP_STATE.outputs || !PREVIEW_KIND) return;
+    if (PREVIEW_KIND === 'mb') previewText.value = APP_STATE.outputs.originals.nexusMb;
+    if (PREVIEW_KIND === 'mp') previewText.value = APP_STATE.outputs.originals.nexusMp || '';
+  });
+
+  document.getElementById('previewDownload').addEventListener('click', () => {
+    if (!PREVIEW_KIND) return;
+    const content = previewText.value;
+    if (PREVIEW_KIND === 'mb') downloadText('supermatrix_mrbayes.nex', content);
+    if (PREVIEW_KIND === 'mp') downloadText('supermatrix_mp.nex', content);
+  });
+
+  const templateModal = document.getElementById('templateModal');
+  const templateTitle = document.getElementById('templateTitle');
+  const templateText = document.getElementById('templateText');
+
+  function openTemplate(kind){
+    APP_STATE.templateEditing = kind;
+    templateTitle.textContent = kind === 'mb' ? 'Edit MrBayes template' : 'Edit PAUP template';
+    templateText.value = kind === 'mb' ? APP_STATE.templates.mb : APP_STATE.templates.mp;
+    templateModal.style.display = 'flex';
+    templateModal.setAttribute('aria-hidden','false');
+  }
+  function closeTemplate(){
+    templateModal.style.display = 'none';
+    templateModal.setAttribute('aria-hidden','true');
+    APP_STATE.templateEditing = null;
+  }
+
+  document.getElementById('templateClose').addEventListener('click', closeTemplate);
+  document.getElementById('templateCloseTop').addEventListener('click', closeTemplate);
+  templateModal.addEventListener('click', (e) => { if (e.target === templateModal) closeTemplate(); });
+
+  document.getElementById('templateSave').addEventListener('click', () => {
+    const kind = APP_STATE.templateEditing;
+    if (!kind) return;
+    const v = templateText.value || '';
+    if (kind === 'mb') APP_STATE.templates.mb = v;
+    if (kind === 'mp') APP_STATE.templates.mp = v;
+    setStatus(`Saved ${kind === 'mb' ? 'MrBayes' : 'PAUP'} template (session only).`);
+    closeTemplate();
+  });
+
+  document.getElementById('templateReset').addEventListener('click', () => {
+    const kind = APP_STATE.templateEditing;
+    if (!kind) return;
+    if (kind === 'mb') templateText.value = MB_TEMPLATE_DEFAULT;
+    if (kind === 'mp') templateText.value = MP_TEMPLATE_DEFAULT;
+  });
+
+  document.getElementById('editMbTemplateBtn').addEventListener('click', () => openTemplate('mb'));
+  document.getElementById('editMpTemplateBtn').addEventListener('click', () => openTemplate('mp'));
+
+  document.getElementById('dlFasta').addEventListener('click', () => {
+    if (!APP_STATE.outputs) return;
+    downloadText('supermatrix.fasta', APP_STATE.outputs.fasta);
+  });
+
+  document.getElementById('dlParts').addEventListener('click', () => {
+    if (!APP_STATE.outputs) return;
+    downloadText('supermatrix.partitions.txt', APP_STATE.outputs.partitions);
+  });
+
+  document.getElementById('dlMb').addEventListener('click', () => {
+    if (!APP_STATE.outputs) return;
+    openPreview('mb', 'MrBayes NEXUS (editable)', APP_STATE.outputs.nexusMb);
+  });
+
+  document.getElementById('dlMp').addEventListener('click', () => {
+    if (!APP_STATE.outputs) return;
+    if (!APP_STATE.outputs.nexusMp){
+      setStatus('Select an outgroup first to enable MP output.');
+      return;
+    }
+    openPreview('mp', 'MP NEXUS (editable)', APP_STATE.outputs.nexusMp);
+  });
+
+  window.addEventListener('error', (e) => {
+    const msg = e?.message || String(e);
+    setStatus(`Error: ${msg}`);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const msg = e?.reason?.message || String(e?.reason || e);
+    setStatus(`Error: ${msg}`);
+  });
+</script>
+</body>
+</html>catenate aligned FASTA loci, trim all-gap columns per locus, export FASTA + NEXUS (MrBayes/MP) + partitions.
+Header matching: full header (no spaces)
+Missing taxa: fill gaps
+Trimming: per-locus all-gap columns
+Inputs
+Expected total taxa (optional)
+Flags possible typos if detected unique taxa ≠ expected.
+Gap characters for trimming
+-
+Default -. Use -. if dots are used as gaps.
+ 
+
+Trim all-gap columns (per locus)
+
+Loci
+Set number of loci → name each locus → upload aligned FASTA → pick model settings.
+Number of loci
+Set rows
+Locus
+FASTA file
+Protein-coding?
+nst
+rates
+statefreqpr
+
+Protein-coding checked → partition file will output _pos1/_pos2/_pos3 with \3. (Use only for in-frame protein alignments.)
+Edit MrBayes template Edit PAUP template
+Run
+Outgroup (for MP)
+          Run Report first to populate taxa list
+        
+Pick from detected taxa to avoid typos.
+
+Report Process / Concatenate
+
+Status
+Ready.
+
+
+Downloads
+Download FASTA Download partitions Download NEXUS (MrBayes) Download NEXUS (MP)
+MrBayes/MP files are shown in an editable preview before download.
