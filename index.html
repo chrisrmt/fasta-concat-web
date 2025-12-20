@@ -1,23 +1,22 @@
-A Concat
-Con<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>FASTA Concat</title>
+  <title>FASTA Concat v1.0.0</title>
   <style>
     :root{
-      --bg:#0b1220;
-      --panel:rgba(255,255,255,.06);
-      --panel2:rgba(255,255,255,.09);
-      --text:rgba(255,255,255,.92);
-      --muted:rgba(255,255,255,.72);
-      --border:rgba(255,255,255,.12);
-      --accent:#22c55e;
-      --accent2:#60a5fa;
-      --warn:#f59e0b;
-      --err:#ef4444;
-      --shadow:0 18px 50px rgba(0,0,0,.35);
+      --bg:#f3f4f6;
+      --panel:#ffffff;
+      --panel2:#f9fafb;
+      --text:#111827;
+      --muted:#4b5563;
+      --border:rgba(17,24,39,.14);
+      --accent:#16a34a;
+      --accent2:#2563eb;
+      --warn:#d97706;
+      --err:#dc2626;
+      --shadow:0 12px 34px rgba(17,24,39,.10);
       --radius:14px;
     }
     *{ box-sizing:border-box; }
@@ -25,11 +24,7 @@ Con<!doctype html>
       margin:0;
       font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
       color:var(--text);
-      background:
-        radial-gradient(1200px 700px at 20% 0%, rgba(96,165,250,.18), transparent 60%),
-        radial-gradient(900px 600px at 90% 10%, rgba(34,197,94,.16), transparent 55%),
-        radial-gradient(1000px 700px at 50% 100%, rgba(245,158,11,.10), transparent 60%),
-        var(--bg);
+      background: var(--bg);
       padding:22px;
     }
     header{
@@ -38,11 +33,12 @@ Con<!doctype html>
       margin-bottom:14px;
     }
     h1{ margin:0; font-size:22px; letter-spacing:.2px; }
+    .version{ color:var(--muted); margin-top:4px; font-size:12px; }
     .subtitle{ color:var(--muted); margin:6px 0 0 0; font-size:13px; }
     .chipRow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .chip{
       border:1px solid var(--border);
-      background:rgba(255,255,255,.04);
+      background: var(--panel2);
       padding:6px 10px;
       border-radius:999px;
       font-size:12px;
@@ -73,12 +69,12 @@ Con<!doctype html>
     label{
       display:block;
       font-size:12px;
-      color:rgba(255,255,255,.82);
+      color:var(--text);
       margin-bottom:6px;
     }
     input[type="text"], input[type="number"], textarea, select{
       width:100%;
-      background:rgba(0,0,0,.20);
+      background:#ffffff;
       color:var(--text);
       border:1px solid var(--border);
       border-radius:12px;
@@ -91,7 +87,7 @@ Con<!doctype html>
 
     .btn{
       border:1px solid var(--border);
-      background:rgba(255,255,255,.06);
+      background: var(--panel2);
       color:var(--text);
       padding:10px 12px;
       border-radius:12px;
@@ -101,27 +97,29 @@ Con<!doctype html>
       user-select:none;
       display:inline-flex; align-items:center; gap:8px;
     }
-    .btn:hover{ background:rgba(255,255,255,.09); border-color:rgba(255,255,255,.18); }
+    .btn:hover{ background:#eef2ff; border-color:rgba(17,24,39,.22); }
     .btn:active{ transform:translateY(1px); }
     .btn.primary{
-      border-color:rgba(34,197,94,.35);
-      background:rgba(34,197,94,.12);
+      border-color:rgba(22,163,74,.25);
+      background:var(--accent);
+      color:#ffffff;
     }
-    .btn.primary:hover{ background:rgba(34,197,94,.16); }
+    .btn.primary:hover{ background:#15803d; }
     .btn.blue{
-      border-color:rgba(96,165,250,.35);
-      background:rgba(96,165,250,.12);
+      border-color:rgba(37,99,235,.25);
+      background:var(--accent2);
+      color:#ffffff;
     }
-    .btn.blue:hover{ background:rgba(96,165,250,.16); }
+    .btn.blue:hover{ background:#1d4ed8; }
     .btn:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
 
     .status{
       font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
-      background:rgba(0,0,0,.22);
+      background: var(--panel2);
       border:1px solid var(--border);
       border-radius:12px;
       padding:10px 12px;
-      color:rgba(255,255,255,.9);
+      color:var(--text);
       font-size:12px;
       min-height:40px;
       display:flex;
@@ -130,34 +128,36 @@ Con<!doctype html>
 
     table{ width:100%; border-collapse:collapse; }
     th, td{
-      border-bottom:1px solid rgba(255,255,255,.08);
+      border-bottom:1px solid rgba(17,24,39,.10);
       padding:10px 8px;
       vertical-align:top;
       font-size:12px;
     }
-    th{ color:rgba(255,255,255,.78); font-weight:600; }
+    th{ color:rgba(17,24,39,.72); font-weight:600; }
 
     .pillWarn{
       margin:10px 0 0 0;
       padding:10px 12px;
       border-radius:12px;
-      border:1px solid rgba(245,158,11,.30);
-      background:rgba(245,158,11,.12);
+      border:1px solid rgba(217,119,6,.30);
+      background:rgba(217,119,6,.10);
       font-size:12px;
+      color:var(--text);
     }
     .pillErr{
       margin:10px 0 0 0;
       padding:10px 12px;
       border-radius:12px;
-      border:1px solid rgba(239,68,68,.30);
-      background:rgba(239,68,68,.12);
+      border:1px solid rgba(220,38,38,.30);
+      background:rgba(220,38,38,.10);
       font-size:12px;
+      color:var(--text);
     }
 
     .modalOverlay{
       position:fixed;
       inset:0;
-      background:rgba(0,0,0,.55);
+      background:rgba(0,0,0,.45);
       display:none;
       align-items:center;
       justify-content:center;
@@ -167,10 +167,10 @@ Con<!doctype html>
     .modal{
       width:min(1100px,100%);
       max-height:92vh;
-      background:rgba(16,20,32,.98);
-      border:1px solid rgba(255,255,255,.14);
+      background:#ffffff;
+      border:1px solid rgba(17,24,39,.14);
       border-radius:16px;
-      box-shadow:0 30px 90px rgba(0,0,0,.6);
+      box-shadow:0 30px 90px rgba(0,0,0,.28);
       overflow:hidden;
       display:flex;
       flex-direction:column;
@@ -181,7 +181,7 @@ Con<!doctype html>
       align-items:center;
       justify-content:space-between;
       gap:12px;
-      border-bottom:1px solid rgba(255,255,255,.10);
+      border-bottom:1px solid rgba(17,24,39,.10);
     }
     .modalHeader h3{ margin:0; font-size:14px; }
     .modalBody{ padding:12px 14px; overflow:auto; }
@@ -192,7 +192,7 @@ Con<!doctype html>
       font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
       font-size:12px;
       line-height:1.4;
-      background:rgba(0,0,0,.22);
+      background:#ffffff;
     }
     .modalFooter{
       padding:12px 14px;
@@ -200,14 +200,18 @@ Con<!doctype html>
       justify-content:flex-end;
       gap:10px;
       flex-wrap:wrap;
-      border-top:1px solid rgba(255,255,255,.10);
+      border-top:1px solid rgba(17,24,39,.10);
     }
+
+    code{ background:rgba(17,24,39,.06); padding:1px 6px; border-radius:8px; }
+    .siteFooter{ margin-top:16px; color:var(--muted); font-size:12px; text-align:center; }
   </style>
 </head>
 <body>
 <header>
   <div>
     <h1>FASTA Concat</h1>
+    <div class="version">v1.0.0</div>
     <div class="subtitle">Concatenate aligned FASTA loci, trim all-gap columns per locus, export FASTA + NEXUS (MrBayes/MP) + partitions.</div>
   </div>
   <div class="chipRow">
@@ -805,8 +809,8 @@ end;`;
 
     const headerHtml = `
       <div style="margin-top:12px;">
-        <div class="muted"><strong style="color:rgba(255,255,255,.9);">Detected total taxa (unique):</strong> ${taxaOrder.length}
-        ${expectedTaxa != null ? `&nbsp; | &nbsp; <strong style="color:rgba(255,255,255,.9);">Expected:</strong> ${expectedTaxa}` : ''}</div>
+        <div class="muted"><strong style="color:var(--text);">Detected total taxa (unique):</strong> ${taxaOrder.length}
+        ${expectedTaxa != null ? `&nbsp; | &nbsp; <strong style="color:var(--text);">Expected:</strong> ${expectedTaxa}` : ''}</div>
       </div>
     `;
 
@@ -1156,46 +1160,7 @@ end;`;
     setStatus(`Error: ${msg}`);
   });
 </script>
+
+<footer class="siteFooter">© 2026 CCS Apurillo</footer>
 </body>
-</html>catenate aligned FASTA loci, trim all-gap columns per locus, export FASTA + NEXUS (MrBayes/MP) + partitions.
-Header matching: full header (no spaces)
-Missing taxa: fill gaps
-Trimming: per-locus all-gap columns
-Inputs
-Expected total taxa (optional)
-Flags possible typos if detected unique taxa ≠ expected.
-Gap characters for trimming
--
-Default -. Use -. if dots are used as gaps.
- 
-
-Trim all-gap columns (per locus)
-
-Loci
-Set number of loci → name each locus → upload aligned FASTA → pick model settings.
-Number of loci
-Set rows
-Locus
-FASTA file
-Protein-coding?
-nst
-rates
-statefreqpr
-
-Protein-coding checked → partition file will output _pos1/_pos2/_pos3 with \3. (Use only for in-frame protein alignments.)
-Edit MrBayes template Edit PAUP template
-Run
-Outgroup (for MP)
-          Run Report first to populate taxa list
-        
-Pick from detected taxa to avoid typos.
-
-Report Process / Concatenate
-
-Status
-Ready.
-
-
-Downloads
-Download FASTA Download partitions Download NEXUS (MrBayes) Download NEXUS (MP)
-MrBayes/MP files are shown in an editable preview before download.
+</html>
